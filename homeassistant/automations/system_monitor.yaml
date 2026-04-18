@@ -1,0 +1,40 @@
+# ============================================================
+# Home Assistant 自动化：系统监控告警
+# ============================================================
+# 当 Frigate 离线或摄像头断连时发送通知
+# ============================================================
+
+- alias: "系统监控 - Frigate 离线告警"
+  id: system_monitor_frigate_offline
+  description: "当 Frigate 服务离线超过 2 分钟时发送通知"
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.frigate_running
+      to: "off"
+      for:
+        minutes: 2
+  action:
+    - service: notify.persistent_notification
+      data:
+        title: "智能灯控系统告警"
+        message: "Frigate NVR 已离线超过 2 分钟，人体位置检测功能暂停。请检查 Docker 容器和 Apple Silicon Detector 状态。"
+    # 可选：发送到手机
+    # - service: notify.mobile_app_your_phone
+    #   data:
+    #     title: "智能灯控告警"
+    #     message: "Frigate 已离线，请检查系统状态"
+  mode: single
+
+- alias: "系统监控 - Frigate 恢复通知"
+  id: system_monitor_frigate_online
+  description: "当 Frigate 服务恢复时发送通知"
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.frigate_running
+      to: "on"
+  action:
+    - service: notify.persistent_notification
+      data:
+        title: "智能灯控系统恢复"
+        message: "Frigate NVR 已恢复在线，人体位置检测功能已恢复正常。"
+  mode: single

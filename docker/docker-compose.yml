@@ -1,0 +1,36 @@
+# 智能家居人体位置感知灯控系统 - Docker 部署
+# 使用方法：
+#   1. 确保 OrbStack 已安装并运行
+#   2. 复制 .env.example -> .env 并填写配置
+#   3. 运行 make config 生成 Frigate 配置
+#   4. 运行 make up 启动服务
+
+services:
+  frigate:
+    image: ghcr.io/blakeblackshear/frigate:0.15.0
+    container_name: frigate
+    restart: unless-stopped
+    ports:
+      # Frigate Web UI
+      - "${FRIGATE_PORT:-8971}:8971"
+      # RTSP restream（go2rtc 转发的 RTSP 流）
+      - "${FRIGATE_RTSP_PORT:-8554}:8554"
+      # go2rtc Web UI（用于摄像头发现和调试）
+      - "${FRIGATE_GO2RTC_PORT:-1984}:1984"
+      # WebRTC
+      - "${FRIGATE_WEBRTC_PORT:-8555}:8555/tcp"
+      - "${FRIGATE_WEBRTC_PORT:-8555}:8555/udp"
+    volumes:
+      # Frigate 配置文件（由 generate-config.sh 从模板生成）
+      - ../frigate/config.yml:/config/config.yml:ro
+      # 存储目录（快照、录像等）
+      - ${FRIGATE_STORAGE_PATH:-/Users/Shared/frigate-storage}:/media/frigate
+    environment:
+      # 时区
+      - TZ=Asia/Shanghai
+    # Apple Silicon Detector 运行在宿主机上，
+    # Frigate 通过 host.docker.internal 访问 ZeroMQ 端口
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # 共享内存大小（用于 Frigate 处理视频帧）
+    shm_size: "256mb"

@@ -1,0 +1,294 @@
+# ============================================================
+# Home Assistant 自动化：人体位置感知灯光联动
+# ============================================================
+# 使用方法（二选一）：
+#   方式 A：复制粘贴到 HA 的自动化编辑器中（设置 -> 自动化 -> 创建）
+#   方式 B：使用 packages 模式（推荐），见 ../packages/smart_presence.yaml
+#
+# 前置条件：
+#   1. Frigate Integration 已通过 HACS 安装并配置
+#   2. ha_xiaomi_home 集成已安装，灯具实体可用
+#   3. Frigate 的 Zone 已配置，对应的 binary_sensor 实体已出现
+#
+# 实体命名规则：
+#   binary_sensor.<摄像头名>_<区域名>_person_occupancy
+#   例如：binary_sensor.living_room_sofa_area_person_occupancy
+#
+# 注意：请根据你的实际 entity_id 修改下面的配置
+# ============================================================
+
+# ===== 客厅沙发区 =====
+
+- alias: "客厅沙发区 - 有人开灯"
+  id: presence_living_room_sofa_light_on
+  description: "当检测到有人在客厅沙发区时，自动打开沙发灯"
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.living_room_sofa_area_person_occupancy
+      to: "on"
+  condition:
+    # 可选：仅在智能灯控开关开启时生效
+    - condition: state
+      entity_id: input_boolean.smart_presence_enabled
+      state: "on"
+    # 可选：仅在勿扰模式关闭时生效
+    - condition: state
+      entity_id: input_boolean.smart_presence_dnd
+      state: "off"
+    # 可选：仅在光线较暗时开灯（需要光照传感器）
+    # - condition: numeric_state
+    #   entity_id: sensor.living_room_illuminance
+    #   below: 200
+  action:
+    - service: light.turn_on
+      target:
+        # 请替换为你的实际灯具 entity_id
+        entity_id: light.living_room_sofa_lamp
+      data:
+        brightness_pct: 80
+        color_temp_kelvin: 4000
+  mode: single
+
+- alias: "客厅沙发区 - 无人关灯"
+  id: presence_living_room_sofa_light_off
+  description: "当客厅沙发区无人超过 3 分钟后，自动关闭沙发灯"
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.living_room_sofa_area_person_occupancy
+      to: "off"
+      for:
+        minutes: 3  # 离开 3 分钟后关灯，避免人体微小移动导致频繁开关
+  condition:
+    - condition: state
+      entity_id: input_boolean.smart_presence_enabled
+      state: "on"
+  action:
+    - service: light.turn_off
+      target:
+        entity_id: light.living_room_sofa_lamp
+  mode: single
+
+# ===== 客厅餐桌区 =====
+
+- alias: "客厅餐桌区 - 有人开灯"
+  id: presence_living_room_dining_light_on
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.living_room_dining_area_person_occupancy
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: input_boolean.smart_presence_enabled
+      state: "on"
+    - condition: state
+      entity_id: input_boolean.smart_presence_dnd
+      state: "off"
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.living_room_dining_light
+      data:
+        brightness_pct: 100
+        color_temp_kelvin: 4500
+  mode: single
+
+- alias: "客厅餐桌区 - 无人关灯"
+  id: presence_living_room_dining_light_off
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.living_room_dining_area_person_occupancy
+      to: "off"
+      for:
+        minutes: 3
+  condition:
+    - condition: state
+      entity_id: input_boolean.smart_presence_enabled
+      state: "on"
+  action:
+    - service: light.turn_off
+      target:
+        entity_id: light.living_room_dining_light
+  mode: single
+
+# ===== 卧室床头区 =====
+
+- alias: "卧室床头区 - 有人开灯"
+  id: presence_bedroom_bed_light_on
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.bedroom_bed_area_person_occupancy
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: input_boolean.smart_presence_enabled
+      state: "on"
+    - condition: state
+      entity_id: input_boolean.smart_presence_dnd
+      state: "off"
+    # 深夜使用低亮度
+  action:
+    - choose:
+        # 22:00 - 07:00 夜间模式：低亮度暖光
+        - conditions:
+            - condition: time
+              after: "22:00:00"
+              before: "07:00:00"
+          sequence:
+            - service: light.turn_on
+              target:
+                entity_id: light.bedroom_bedside_lamp
+              data:
+                brightness_pct: 20
+                color_temp_kelvin: 2700
+      # 默认：正常亮度
+      default:
+        - service: light.turn_on
+          target:
+            entity_id: light.bedroom_bedside_lamp
+          data:
+            brightness_pct: 60
+            color_temp_kelvin: 3500
+  mode: single
+
+- alias: "卧室床头区 - 无人关灯"
+  id: presence_bedroom_bed_light_off
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.bedroom_bed_area_person_occupancy
+      to: "off"
+      for:
+        minutes: 5  # 卧室延迟稍长
+  condition:
+    - condition: state
+      entity_id: input_boolean.smart_presence_enabled
+      state: "on"
+  action:
+    - service: light.turn_off
+      target:
+        entity_id: light.bedroom_bedside_lamp
+  mode: single
+
+# ===== 卧室书桌区 =====
+
+- alias: "卧室书桌区 - 有人开灯"
+  id: presence_bedroom_desk_light_on
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.bedroom_desk_area_person_occupancy
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: input_boolean.smart_presence_enabled
+      state: "on"
+    - condition: state
+      entity_id: input_boolean.smart_presence_dnd
+      state: "off"
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom_desk_lamp
+      data:
+        brightness_pct: 100
+        color_temp_kelvin: 5000  # 书桌用冷白光
+  mode: single
+
+- alias: "卧室书桌区 - 无人关灯"
+  id: presence_bedroom_desk_light_off
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.bedroom_desk_area_person_occupancy
+      to: "off"
+      for:
+        minutes: 3
+  condition:
+    - condition: state
+      entity_id: input_boolean.smart_presence_enabled
+      state: "on"
+  action:
+    - service: light.turn_off
+      target:
+        entity_id: light.bedroom_desk_lamp
+  mode: single
+
+# ===== 书房书桌区 =====
+
+- alias: "书房书桌区 - 有人开灯"
+  id: presence_study_desk_light_on
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.study_desk_area_person_occupancy
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: input_boolean.smart_presence_enabled
+      state: "on"
+    - condition: state
+      entity_id: input_boolean.smart_presence_dnd
+      state: "off"
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.study_desk_lamp
+      data:
+        brightness_pct: 100
+        color_temp_kelvin: 5000
+  mode: single
+
+- alias: "书房书桌区 - 无人关灯"
+  id: presence_study_desk_light_off
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.study_desk_area_person_occupancy
+      to: "off"
+      for:
+        minutes: 5
+  condition:
+    - condition: state
+      entity_id: input_boolean.smart_presence_enabled
+      state: "on"
+  action:
+    - service: light.turn_off
+      target:
+        entity_id: light.study_desk_lamp
+  mode: single
+
+# ===== 客厅入口区 =====
+
+- alias: "客厅入口 - 有人开灯"
+  id: presence_living_room_entrance_light_on
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.living_room_entrance_person_occupancy
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: input_boolean.smart_presence_enabled
+      state: "on"
+    - condition: state
+      entity_id: input_boolean.smart_presence_dnd
+      state: "off"
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.entrance_light
+      data:
+        brightness_pct: 100
+  mode: single
+
+- alias: "客厅入口 - 无人关灯"
+  id: presence_living_room_entrance_light_off
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.living_room_entrance_person_occupancy
+      to: "off"
+      for:
+        minutes: 2  # 入口区过道延迟较短
+  condition:
+    - condition: state
+      entity_id: input_boolean.smart_presence_enabled
+      state: "on"
+  action:
+    - service: light.turn_off
+      target:
+        entity_id: light.entrance_light
+  mode: single

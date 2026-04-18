@@ -1,0 +1,293 @@
+# ============================================================
+# Home Assistant Packages：智能人体位置感知灯控系统
+# ============================================================
+# 此文件使用 HA 的 packages 模式，将所有相关配置打包在一个文件中。
+#
+# 安装方法：
+#   1. 将此文件复制到 HA 的 config/packages/ 目录
+#   2. 确保 configuration.yaml 中启用了 packages：
+#      homeassistant:
+#        packages: !include_dir_named packages/
+#   3. 重启 Home Assistant
+#
+# 所有 entity_id 需要替换为你的实际设备
+# ============================================================
+
+# ---------- 辅助实体（开关） ----------
+input_boolean:
+  smart_presence_enabled:
+    name: "智能灯控总开关"
+    icon: mdi:motion-sensor
+    initial: true
+
+  smart_presence_dnd:
+    name: "勿扰模式"
+    icon: mdi:do-not-disturb
+    initial: false
+
+# ---------- 自动化规则 ----------
+automation:
+  # ===== 客厅沙发区 =====
+  - alias: "客厅沙发区 - 有人开灯"
+    id: pkg_presence_living_room_sofa_on
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.living_room_sofa_area_person_occupancy
+        to: "on"
+    condition:
+      - condition: state
+        entity_id: input_boolean.smart_presence_enabled
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.smart_presence_dnd
+        state: "off"
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: light.living_room_sofa_lamp  # 替换为实际 entity_id
+        data:
+          brightness_pct: 80
+          color_temp_kelvin: 4000
+    mode: single
+
+  - alias: "客厅沙发区 - 无人关灯"
+    id: pkg_presence_living_room_sofa_off
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.living_room_sofa_area_person_occupancy
+        to: "off"
+        for:
+          minutes: 3
+    condition:
+      - condition: state
+        entity_id: input_boolean.smart_presence_enabled
+        state: "on"
+    action:
+      - service: light.turn_off
+        target:
+          entity_id: light.living_room_sofa_lamp
+    mode: single
+
+  # ===== 客厅餐桌区 =====
+  - alias: "客厅餐桌区 - 有人开灯"
+    id: pkg_presence_living_room_dining_on
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.living_room_dining_area_person_occupancy
+        to: "on"
+    condition:
+      - condition: state
+        entity_id: input_boolean.smart_presence_enabled
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.smart_presence_dnd
+        state: "off"
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: light.living_room_dining_light
+        data:
+          brightness_pct: 100
+          color_temp_kelvin: 4500
+    mode: single
+
+  - alias: "客厅餐桌区 - 无人关灯"
+    id: pkg_presence_living_room_dining_off
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.living_room_dining_area_person_occupancy
+        to: "off"
+        for:
+          minutes: 3
+    condition:
+      - condition: state
+        entity_id: input_boolean.smart_presence_enabled
+        state: "on"
+    action:
+      - service: light.turn_off
+        target:
+          entity_id: light.living_room_dining_light
+    mode: single
+
+  # ===== 卧室床头区 =====
+  - alias: "卧室床头区 - 有人开灯"
+    id: pkg_presence_bedroom_bed_on
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.bedroom_bed_area_person_occupancy
+        to: "on"
+    condition:
+      - condition: state
+        entity_id: input_boolean.smart_presence_enabled
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.smart_presence_dnd
+        state: "off"
+    action:
+      - choose:
+          - conditions:
+              - condition: time
+                after: "22:00:00"
+                before: "07:00:00"
+            sequence:
+              - service: light.turn_on
+                target:
+                  entity_id: light.bedroom_bedside_lamp
+                data:
+                  brightness_pct: 20
+                  color_temp_kelvin: 2700
+        default:
+          - service: light.turn_on
+            target:
+              entity_id: light.bedroom_bedside_lamp
+            data:
+              brightness_pct: 60
+              color_temp_kelvin: 3500
+    mode: single
+
+  - alias: "卧室床头区 - 无人关灯"
+    id: pkg_presence_bedroom_bed_off
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.bedroom_bed_area_person_occupancy
+        to: "off"
+        for:
+          minutes: 5
+    condition:
+      - condition: state
+        entity_id: input_boolean.smart_presence_enabled
+        state: "on"
+    action:
+      - service: light.turn_off
+        target:
+          entity_id: light.bedroom_bedside_lamp
+    mode: single
+
+  # ===== 卧室书桌区 =====
+  - alias: "卧室书桌区 - 有人开灯"
+    id: pkg_presence_bedroom_desk_on
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.bedroom_desk_area_person_occupancy
+        to: "on"
+    condition:
+      - condition: state
+        entity_id: input_boolean.smart_presence_enabled
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.smart_presence_dnd
+        state: "off"
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: light.bedroom_desk_lamp
+        data:
+          brightness_pct: 100
+          color_temp_kelvin: 5000
+    mode: single
+
+  - alias: "卧室书桌区 - 无人关灯"
+    id: pkg_presence_bedroom_desk_off
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.bedroom_desk_area_person_occupancy
+        to: "off"
+        for:
+          minutes: 3
+    condition:
+      - condition: state
+        entity_id: input_boolean.smart_presence_enabled
+        state: "on"
+    action:
+      - service: light.turn_off
+        target:
+          entity_id: light.bedroom_desk_lamp
+    mode: single
+
+  # ===== 书房书桌区 =====
+  - alias: "书房书桌区 - 有人开灯"
+    id: pkg_presence_study_desk_on
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.study_desk_area_person_occupancy
+        to: "on"
+    condition:
+      - condition: state
+        entity_id: input_boolean.smart_presence_enabled
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.smart_presence_dnd
+        state: "off"
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: light.study_desk_lamp
+        data:
+          brightness_pct: 100
+          color_temp_kelvin: 5000
+    mode: single
+
+  - alias: "书房书桌区 - 无人关灯"
+    id: pkg_presence_study_desk_off
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.study_desk_area_person_occupancy
+        to: "off"
+        for:
+          minutes: 5
+    condition:
+      - condition: state
+        entity_id: input_boolean.smart_presence_enabled
+        state: "on"
+    action:
+      - service: light.turn_off
+        target:
+          entity_id: light.study_desk_lamp
+    mode: single
+
+  # ===== 系统监控 =====
+  - alias: "系统监控 - Frigate 离线告警"
+    id: pkg_system_frigate_offline
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.frigate_running
+        to: "off"
+        for:
+          minutes: 2
+    action:
+      - service: notify.persistent_notification
+        data:
+          title: "智能灯控系统告警"
+          message: "Frigate NVR 已离线超过 2 分钟，人体检测功能暂停。请检查 Docker 容器和 Detector 状态。"
+    mode: single
+
+  - alias: "系统监控 - Frigate 恢复"
+    id: pkg_system_frigate_online
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.frigate_running
+        to: "on"
+    action:
+      - service: notify.persistent_notification
+        data:
+          title: "智能灯控系统恢复"
+          message: "Frigate NVR 已恢复，人体检测功能正常。"
+    mode: single
+
+# ---------- 脚本 ----------
+script:
+  presence_lights_all_off:
+    alias: "关闭所有位置感知灯"
+    description: "一键关闭所有由位置感知控制的灯具"
+    sequence:
+      - service: light.turn_off
+        target:
+          entity_id:
+            - light.living_room_sofa_lamp
+            - light.living_room_dining_light
+            - light.bedroom_bedside_lamp
+            - light.bedroom_desk_lamp
+            - light.study_desk_lamp
+            - light.entrance_light
+    mode: single
+    icon: mdi:lightbulb-off

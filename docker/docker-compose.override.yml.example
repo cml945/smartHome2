@@ -1,0 +1,26 @@
+# Docker Compose 本地覆盖示例
+# 复制此文件为 docker-compose.override.yml 来自定义本地配置
+# 用法：cp docker-compose.override.yml.example docker-compose.override.yml
+
+services:
+  frigate:
+    # 如需更大的共享内存（多路高分辨率摄像头场景）
+    # shm_size: "512mb"
+
+    # 如需挂载额外的存储目录
+    # volumes:
+    #   - /Volumes/ExternalDisk/frigate:/media/frigate
+
+    # 如需使用 host 网络模式（解决 OrbStack <-> UTM 网络问题时的备选方案）
+    # network_mode: host
+    # 注意：使用 host 模式时需要移除 ports 映射
+
+    # 如需限制资源使用
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "4.0"
+    #       memory: 4G
+    # 取消上方任一注释并修改值来启用对应配置
+    labels:
+      com.smartHome2.override: "true"

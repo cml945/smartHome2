@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 服务标识 -->
+    <key>Label</key>
+    <string>com.frigate.detector</string>
+
+    <!-- Detector 可执行文件路径（由 install.sh 自动替换） -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>__DETECTOR_BIN__</string>
+    </array>
+
+    <!-- 开机自启动 -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- 崩溃后自动重启 -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- 崩溃后等待 5 秒再重启，避免快速循环 -->
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+
+    <!-- 日志输出 -->
+    <key>StandardOutPath</key>
+    <string>__LOG_DIR__/frigate-detector.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOG_DIR__/frigate-detector.log</string>
+
+    <!-- 环境变量 -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    </dict>
+</dict>
+</plist>

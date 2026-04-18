@@ -1,0 +1,36 @@
+# 环境变量（含敏感凭证）
+.env
+
+# Frigate 生成的实际配置（含小米账号信息）
+frigate/config.yml
+
+# Frigate 存储（录像、快照）
+frigate/storage/
+frigate/media/
+
+# Apple Silicon Detector 二进制
+detector/bin/
+detector/*.app
+detector/*.dmg
+
+# 日志
+*.log
+logs/
+
+# macOS
+.DS_Store
+._*
+
+# Docker 数据卷
+docker/data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 备份
+backups/
+*.bak
