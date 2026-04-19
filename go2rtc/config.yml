@@ -5,5 +5,6 @@
 streams:
   study_cam:
     - xiaomi://1280623889:cn@192.168.31.9?did=268058994&model=chuangmi.camera.ipc021
+
 xiaomi:
   "1280623889": V1:pwROAesIuzMBPe5slLSsQh/7L/zLs4dJ5wVGv5zDSiwtcXNS5WujQjO3Gt5F0Up1PTzKWBko0otn1WbmO3HgcexeQ6T9e4SCyIFE46yTCmQ/fjUvLRy4P8//2sQgPpm3hUMQhe4pIC43XzFO7IRjoa+YSMsGBgj9M8RAHpV3aZfccXJvtHbHdz0anGnsRQlc/lwKkZ3AhnZQvUGp/so8o0leywYw6MnUhgou2SS2zQibu2zSpkw+zIM3tIMiVWeOZ7+zOfGvlniGpxceMLK3/E3xEcZ4IJszdysJmj0MCQE=
