@@ -1,0 +1,9 @@
+# go2rtc 独立配置
+# 负责接入小米摄像头并提供 RTSP 流给 Frigate
+# 首次使用请打开 WebUI (http://localhost:1984) -> Add -> Xiaomi 登录
+
+streams:
+  study_cam:
+    - xiaomi://1280623889:cn@192.168.31.9?did=268058994&model=chuangmi.camera.ipc021
+xiaomi:
+  "1280623889": V1:pwROAesIuzMBPe5slLSsQh/7L/zLs4dJ5wVGv5zDSiwtcXNS5WujQjO3Gt5F0Up1PTzKWBko0otn1WbmO3HgcexeQ6T9e4SCyIFE46yTCmQ/fjUvLRy4P8//2sQgPpm3hUMQhe4pIC43XzFO7IRjoa+YSMsGBgj9M8RAHpV3aZfccXJvtHbHdz0anGnsRQlc/lwKkZ3AhnZQvUGp/so8o0leywYw6MnUhgou2SS2zQibu2zSpkw+zIM3tIMiVWeOZ7+zOfGvlniGpxceMLK3/E3xEcZ4IJszdysJmj0MCQE=

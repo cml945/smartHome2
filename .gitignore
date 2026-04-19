@@ -1,8 +1,10 @@
 # 环境变量（含敏感凭证）
 .env
 
-# Frigate 生成的实际配置（含小米账号信息）
+# Frigate 运行时数据（含凭证和数据库）
 frigate/config.yml
+frigate/config/
+!frigate/config.example.yml
 
 # Frigate 存储（录像、快照）
 frigate/storage/
@@ -12,6 +14,9 @@ frigate/media/
 detector/bin/
 detector/*.app
 detector/*.dmg
+
+# go2rtc 二进制
+bin/
 
 # 日志
 *.log

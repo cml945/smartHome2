@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.go2rtc</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/etmacmini/代码/smartHome2/bin/go2rtc</string>
+        <string>-config</string>
+        <string>/Users/etmacmini/代码/smartHome2/go2rtc/config.yml</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/etmacmini/代码/smartHome2/logs/go2rtc.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/etmacmini/代码/smartHome2/logs/go2rtc.error.log</string>
+    <key>WorkingDirectory</key>
+    <string>/Users/etmacmini/代码/smartHome2</string>
+</dict>
+</plist>

@@ -6,23 +6,43 @@
 #   4. 运行 make up 启动服务
 
 services:
+  # ---------- MQTT Broker ----------
+  # Mosquitto 运行在 Mac 上（替代 HA 的 Mosquitto Add-on）
+  # HA 通过局域网连接此 MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+      - "9001:9001"  # WebSocket（可选）
+    volumes:
+      - ../mosquitto/config:/mosquitto/config:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    environment:
+      - TZ=Asia/Shanghai
+
+  # ---------- go2rtc ----------
+  # go2rtc 原生运行在 macOS 上（非 Docker），因为：
+  # - 小米摄像头使用 P2P UDP 协议，需要直接访问局域网
+  # - OrbStack 的 Docker 网络（包括 host 模式）无法正确路由 P2P UDP
+  # 启动方式：bin/go2rtc -config go2rtc/config.yml
+  # 或使用 launchd 自动启动：launchctl load go2rtc/com.go2rtc.plist
+
+  # ---------- Frigate NVR ----------
   frigate:
     image: ghcr.io/blakeblackshear/frigate:0.15.0
     container_name: frigate
     restart: unless-stopped
+    depends_on:
+      - mosquitto
     ports:
       # Frigate Web UI
       - "${FRIGATE_PORT:-8971}:8971"
-      # RTSP restream（go2rtc 转发的 RTSP 流）
-      - "${FRIGATE_RTSP_PORT:-8554}:8554"
-      # go2rtc Web UI（用于摄像头发现和调试）
-      - "${FRIGATE_GO2RTC_PORT:-1984}:1984"
-      # WebRTC
-      - "${FRIGATE_WEBRTC_PORT:-8555}:8555/tcp"
-      - "${FRIGATE_WEBRTC_PORT:-8555}:8555/udp"
     volumes:
-      # Frigate 配置文件（由 generate-config.sh 从模板生成）
-      - ../frigate/config.yml:/config/config.yml:ro
+      # Frigate 完整配置目录（持久化用户数据库、zone 配置等）
+      - ../frigate/config:/config
       # 存储目录（快照、录像等）
       - ${FRIGATE_STORAGE_PATH:-/Users/Shared/frigate-storage}:/media/frigate
     environment:
@@ -34,3 +54,7 @@ services:
       - "host.docker.internal:host-gateway"
     # 共享内存大小（用于 Frigate 处理视频帧）
     shm_size: "256mb"
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:

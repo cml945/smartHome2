@@ -9,51 +9,38 @@
 # 下面的坐标仅为示例，请根据实际摄像头画面调整。
 # ============================================================
 
-# ---------- MQTT 连接（指向 HA 的 Mosquitto Add-on）----------
+# ---------- MQTT 连接（Mosquitto 与 Frigate 在同一 Docker 网络中）----------
 mqtt:
-  host: ${HA_IP}
-  port: ${MQTT_PORT}
-  # 如果 Mosquitto 配置了认证，取消下面的注释
-  # user: ${MQTT_USER}
-  # password: ${MQTT_PASSWORD}
+  host: mosquitto
+  port: 1883
 
-# ---------- go2rtc 视频流接入 ----------
-# go2rtc 原生支持小米摄像头的 xiaomi:// 协议
-# 首次使用请先打开 go2rtc WebUI (http://localhost:1984)，
-# 点击 Add -> Xiaomi，用小米账号登录后会自动发现摄像头并填充参数。
-go2rtc:
-  streams:
-    # 客厅摄像头
-    living_room_cam:
-      - xiaomi://${XIAOMI_USER_ID}:${XIAOMI_REGION}@${CAM_LIVING_ROOM_IP}?did=${CAM_LIVING_ROOM_DID}&model=${CAM_LIVING_ROOM_MODEL}
-    # 卧室摄像头
-    bedroom_cam:
-      - xiaomi://${XIAOMI_USER_ID}:${XIAOMI_REGION}@${CAM_BEDROOM_IP}?did=${CAM_BEDROOM_DID}&model=${CAM_BEDROOM_MODEL}
-    # 书房摄像头
-    study_cam:
-      - xiaomi://${XIAOMI_USER_ID}:${XIAOMI_REGION}@${CAM_STUDY_IP}?did=${CAM_STUDY_DID}&model=${CAM_STUDY_MODEL}
+# ---------- go2rtc ----------
+# 视频流由独立的 go2rtc 容器提供（支持小米 xiaomi:// 协议）
+# go2rtc 使用 host 网络模式以支持 P2P UDP 协议
+# Frigate 通过 host.docker.internal 访问 go2rtc 的 RTSP 输出
 
-# ---------- 检测器配置（Apple Silicon Detector）----------
-# Detector 作为独立进程运行在 macOS 宿主机上，
-# 通过 ZeroMQ 与 Docker 内的 Frigate 通信。
-# 确保 Detector 已启动后再启动 Frigate。
+# ---------- 检测器配置 ----------
+# 当前使用 CPU 检测器（Frigate 0.15.0 不支持 apple_silicon 类型）
+# 升级到 Frigate 0.17+ 后可改用 apple_silicon 检测器以提升性能
 detectors:
-  apple_silicon:
-    type: apple_silicon
-    # host.docker.internal 指向 Docker 宿主机（macOS）
-    address: host.docker.internal:${DETECTOR_ZMQ_PORT}
-    model:
-      path: ${DETECTOR_MODEL}
+  cpu_detector:
+    type: cpu
+  # apple_silicon（需 Frigate 0.17+）:
+  # apple_silicon:
+  #   type: apple_silicon
+  #   address: host.docker.internal:${DETECTOR_ZMQ_PORT}
+  #   model:
+  #     path: ${DETECTOR_MODEL}
 
 # ---------- 摄像头及区域检测配置 ----------
 cameras:
   # ========================
-  # 客厅摄像头
+  # 书房摄像头（小米智能摄像机云台版Pro）
   # ========================
-  living_room:
+  study:
     ffmpeg:
       inputs:
-        - path: rtsp://127.0.0.1:8554/living_room_cam
+        - path: rtsp://host.docker.internal:8554/study_cam
           roles: ["detect"]
     detect:
       width: 1280
@@ -61,14 +48,11 @@ cameras:
       fps: 1  # 每秒检测一次
     # Zone 定义 —— 坐标为归一化值 (0.0~1.0)
     # 请在 Frigate Web UI 中拖拽绘制，然后将坐标复制到这里
+    # 下面是示例坐标，需根据实际摄像头画面调整
     zones:
-      sofa_area:
-        coordinates: 0.0,0.5,0.4,0.5,0.4,1.0,0.0,1.0
+      desk_area:
+        coordinates: 0.1,0.1,0.9,0.1,0.9,0.9,0.1,0.9
         # 提示：坐标格式为 x1,y1,x2,y2,x3,y3,x4,y4（多边形顶点）
-      dining_area:
-        coordinates: 0.4,0.3,0.8,0.3,0.8,0.9,0.4,0.9
-      entrance:
-        coordinates: 0.8,0.0,1.0,0.0,1.0,0.7,0.8,0.7
     objects:
       track:
         - person  # 仅检测人体
@@ -76,10 +60,10 @@ cameras:
         person:
           min_score: 0.5    # 最低检测置信度
           min_area: 5000    # 最小检测区域（像素面积），过滤远处的误检
-    # 可选：遮罩区域（屏蔽窗户、电视等容易产生误报的区域）
+    # 可选：遮罩区域（屏蔽窗户等容易产生误报的区域）
     # motion:
     #   mask:
-    #     - 0.0,0.0,0.2,0.0,0.2,0.3,0.0,0.3  # 示例：左上角窗户区域
+    #     - 0.0,0.0,0.2,0.0,0.2,0.3,0.0,0.3
     snapshots:
       enabled: true
       bounding_box: true
@@ -87,59 +71,25 @@ cameras:
       enabled: false  # 默认不录像，如需录像改为 true
 
   # ========================
-  # 卧室摄像头
+  # 如需添加更多摄像头，参照以下模板：
   # ========================
-  bedroom:
-    ffmpeg:
-      inputs:
-        - path: rtsp://127.0.0.1:8554/bedroom_cam
-          roles: ["detect"]
-    detect:
-      width: 1280
-      height: 720
-      fps: 1
-    zones:
-      bed_area:
-        coordinates: 0.0,0.0,0.6,0.0,0.6,0.8,0.0,0.8
-      desk_area:
-        coordinates: 0.6,0.0,1.0,0.0,1.0,0.8,0.6,0.8
-    objects:
-      track:
-        - person
-      filters:
-        person:
-          min_score: 0.5
-          min_area: 5000
-    snapshots:
-      enabled: true
-      bounding_box: true
-    record:
-      enabled: false
-
-  # ========================
-  # 书房摄像头
-  # ========================
-  study:
-    ffmpeg:
-      inputs:
-        - path: rtsp://127.0.0.1:8554/study_cam
-          roles: ["detect"]
-    detect:
-      width: 1280
-      height: 720
-      fps: 1
-    zones:
-      desk_area:
-        coordinates: 0.1,0.1,0.9,0.1,0.9,0.9,0.1,0.9
-    objects:
-      track:
-        - person
-      filters:
-        person:
-          min_score: 0.5
-          min_area: 5000
-    snapshots:
-      enabled: true
-      bounding_box: true
-    record:
-      enabled: false
+  # living_room:
+  #   ffmpeg:
+  #     inputs:
+  #       - path: rtsp://host.docker.internal:8554/living_room_cam
+  #         roles: ["detect"]
+  #   detect:
+  #     width: 1280
+  #     height: 720
+  #     fps: 1
+  #   zones:
+  #     sofa_area:
+  #       coordinates: 0.0,0.5,0.4,0.5,0.4,1.0,0.0,1.0
+  #   objects:
+  #     track:
+  #       - person
+  #   snapshots:
+  #     enabled: true
+  #     bounding_box: true
+  #   record:
+  #     enabled: false
