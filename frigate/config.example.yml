@@ -71,6 +71,36 @@ cameras:
       enabled: false  # 默认不录像，如需录像改为 true
 
   # ========================
+  # 客厅摄像头
+  # ========================
+  living_room:
+    ffmpeg:
+      inputs:
+        - path: rtsp://host.docker.internal:8554/living_room_cam
+          roles: ["detect"]
+    detect:
+      width: 1280
+      height: 720
+      fps: 1
+    zones:
+      sofa_area:
+        coordinates: 0.0,0.5,0.4,0.5,0.4,1.0,0.0,1.0
+      dining_area:
+        coordinates: 0.5,0.5,0.9,0.5,0.9,1.0,0.5,1.0
+    objects:
+      track:
+        - person
+      filters:
+        person:
+          min_score: 0.5
+          min_area: 5000
+    snapshots:
+      enabled: true
+      bounding_box: true
+    record:
+      enabled: false
+
+  # ========================
   # 如需添加更多摄像头，参照以下模板：
   # ========================
   # living_room:

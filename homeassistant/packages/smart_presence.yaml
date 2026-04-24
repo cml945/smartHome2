@@ -68,6 +68,33 @@ automation:
           entity_id: light.living_room_sofa_lamp
     mode: single
 
+  # ===== 客厅咖啡区 =====
+  - alias: "客厅咖啡区 - 有人开灯"
+    id: pkg_presence_living_room_coffee_on
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.coffee_area_person_occupancy
+        to: "on"
+    action:
+      - service: switch.turn_on
+        target:
+          entity_id: switch.lemesh_cn_1124006093_sw0a04_on_p_2_1
+    mode: single
+
+  - alias: "客厅咖啡区 - 无人关灯"
+    id: pkg_presence_living_room_coffee_off
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.coffee_area_person_occupancy
+        to: "off"
+        for:
+          minutes: 1
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id: switch.lemesh_cn_1124006093_sw0a04_on_p_2_1
+    mode: single
+
   # ===== 客厅餐桌区 =====
   - alias: "客厅餐桌区 - 有人开灯"
     id: pkg_presence_living_room_dining_on
@@ -289,5 +316,9 @@ script:
             - light.bedroom_desk_lamp
             - light.study_desk_lamp
             - light.entrance_light
+      - service: switch.turn_off
+        target:
+          entity_id:
+            - switch.lemesh_cn_1124006093_sw0a04_on_p_2_1
     mode: single
     icon: mdi:lightbulb-off
