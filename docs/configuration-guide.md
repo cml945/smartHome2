@@ -401,7 +401,69 @@ curl -s -X POST "http://${HA_IP}:8123/api/config/config_entries/entry/${ENTRY_ID
 | condition 引用了不存在的实体 | 检查 `input_boolean.*` 等辅助实体是否在 HA 中已创建 |
 | 传感器一直是 off | Zone 坐标问题，参考问题 1 |
 
-### 问题 4：重新加载 Frigate 集成后，灯被意外关闭
+### 问题 4：go2rtc 摄像头 401 Unauthorized / Token 过期
+
+**症状**：Frigate 所有摄像头显示 "No frames have been received, check error logs"，
+go2rtc 日志持续报 `streams: 401 Unauthorized`。
+
+**根因**：小米 `passToken` 有效期约 72 小时，过期后 go2rtc 无法从小米云端获取摄像头的
+P2P 连接凭据。go2rtc v1.9.14 没有自动刷新 token 的机制。
+此外，v1.9.14 的 WebUI 登录存在已知 bug（[#2237](https://github.com/AlexxIT/go2rtc/issues/2237)），
+即使重新登录也可能拿到无效的 token。
+
+**排查步骤**：
+
+```bash
+# 1. 确认 go2rtc 进程是否存活
+pgrep -fl go2rtc
+launchctl list | grep go2rtc    # 退出码应为 0
+
+# 2. 查看 go2rtc 日志，确认是否为 401 错误
+curl -s http://127.0.0.1:1984/api/log | tail -10
+# 如果看到 "streams: 401 Unauthorized" → token 过期，继续下面的修复步骤
+# 如果看到 "read udp: i/o timeout" → 认证正常但 P2P 连接超时，检查摄像头网络
+```
+
+**修复方案：使用 get_xiaomi_token.py 脚本刷新 token**
+
+> 由于 go2rtc WebUI 的小米登录流程存在 bug，推荐使用项目自带的
+> `scripts/get_xiaomi_token.py` 脚本获取 token（该脚本完整实现了
+> 小米的账号密码登录 + 短信验证码的认证流程）。
+
+```bash
+# Step 1: 运行脚本（需要手机号和密码，并接收短信验证码）
+python3 scripts/get_xiaomi_token.py
+
+# 脚本流程：
+#   1. 输入小米账号（手机号，不是数字用户ID）和密码
+#   2. 小米发送短信验证码到你的手机
+#   3. 输入验证码，脚本获取 passToken
+#   4. 选择 y 自动写入 go2rtc/config.yml
+
+# Step 2: 重启 go2rtc
+launchctl stop com.go2rtc && launchctl start com.go2rtc
+
+# Step 3: 验证修复
+sleep 5
+curl -s http://127.0.0.1:1984/api/log | tail -5
+# 不再出现 "401 Unauthorized" 即表示修复成功
+# 如果出现 "read udp: i/o timeout" 则是摄像头网络问题，非 token 问题
+```
+
+**脚本依赖**：首次使用需安装 `requests` 库：
+
+```bash
+pip3 install requests
+```
+
+**注意事项**：
+- 登录时必须使用**手机号**（如 `17342016281`），不能用数字用户 ID（如 `1280623889`）
+- 小米可能要求短信验证码（flag=4）或邮箱验证码（flag=8），按提示操作即可
+- Token 约 3 天过期一次，目前需要手动重新执行脚本刷新
+- 相关上游 issue：[#2233](https://github.com/AlexxIT/go2rtc/issues/2233)（token 自动刷新）、
+  [#2237](https://github.com/AlexxIT/go2rtc/issues/2237)（WebUI 登录 bug）
+
+### 问题 5：重新加载 Frigate 集成后，灯被意外关闭
 
 **原因**：重新加载导致所有 Frigate 传感器状态经历 `on → unavailable → off`，
 触发了"无人 N 分钟关灯"的倒计时。
@@ -468,8 +530,10 @@ done
 ```bash
 # ====== go2rtc ======
 launchctl list | grep go2rtc          # 查看 go2rtc 服务状态
-launchctl unload ~/Library/LaunchAgents/com.go2rtc.plist  # 停止
-launchctl load ~/Library/LaunchAgents/com.go2rtc.plist    # 启动
+launchctl stop com.go2rtc             # 停止
+launchctl start com.go2rtc            # 启动
+curl -s http://localhost:1984/api/log | tail -10  # 查看日志（检查 401 等错误）
+python3 scripts/get_xiaomi_token.py   # 刷新小米 token（token 约 3 天过期）
 
 # ====== Docker 服务 ======
 cd docker && docker compose up -d     # 启动所有服务
