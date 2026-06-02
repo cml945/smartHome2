@@ -108,12 +108,46 @@ make net-test # 网络连通性诊断
 
 走进摄像头视角的指定区域 -> 对应灯应该自动亮起；离开后延迟熄灭。
 
+### 8. 打开图形化控制台
+
+```bash
+make dashboard
+```
+
+然后在浏览器打开：http://127.0.0.1:8765
+
+控制台仅监听本机地址 `127.0.0.1`，不暴露到局域网。第一屏会显示整体健康状态、核心服务卡片、全量诊断、小米 token 刷新区和日志区。
+
+可用操作：
+- 点击顶部按钮一键启动、重启、停止全部服务
+- 在每个服务卡片中单独执行 `启动`、`重启`、`停止`
+- 点击 Frigate 或 go2rtc 卡片中的 `打开` 进入对应 Web UI
+- 查看 go2rtc 和小米 token 监控日志
+- 在页面中交互式刷新小米摄像头 token
+
+健康检查口径：
+- Docker、Frigate、Mosquitto、go2rtc、token 监控会显示运行状态
+- Frigate Web UI 使用 HTTPS 访问：`https://127.0.0.1:8971`
+- Mosquitto 默认检查本机端口：`127.0.0.1:1883`
+- Home Assistant API 返回 `401/403` 也视为可达，因为这说明服务在线但需要认证
+- 如果 Frigate 配置使用 `cpu_detector`，独立 Apple Silicon Detector 未运行不会被视为故障
+- 摄像头、存储、Frigate API、go2rtc WebUI 也会纳入整体状态
+
+小米 token 刷新会调用 `scripts/get_xiaomi_token.py --yes --restart --check`，可能需要输入小米账号、密码和短信/邮箱验证码。控制台不会保存账号密码，不会回显密码，也不会显示完整 passToken；刷新成功后会写入 `go2rtc/config.yml`、重启 go2rtc，并检查日志中是否仍有新的 `401 Unauthorized`。
+
+如果只想在终端查看控制台使用的结构化状态，可运行：
+
+```bash
+make dashboard-status
+```
+
 ## 项目结构
 
 ```
 smartHome2/
 ├── .env.example                  # 环境变量模板
 ├── Makefile                      # 便捷命令
+├── dashboard/                    # 本地 Web 控制台
 ├── docker/
 │   └── docker-compose.yml        # Frigate 容器部署
 ├── frigate/
@@ -144,9 +178,13 @@ smartHome2/
 | `make config` | 重新生成配置 |
 | `make net-test` | 网络诊断 |
 | `make status` | 查看服务状态 |
+| `make dashboard` | 启动本地 Web 控制台 |
+| `make dashboard-open` | 在浏览器打开本地 Web 控制台 |
+| `make dashboard-status` | 输出结构化状态 JSON |
 | `make detector-install` | 安装 Detector |
 | `make detector-start` | 启动 Detector |
 | `make detector-stop` | 停止 Detector |
+| `make xiaomi-token-refresh` | 命令行刷新小米摄像头 token |
 
 ## 自定义
 

@@ -14,6 +14,7 @@
 #   make detector-stop   停止 Detector 服务
 #   make xiaomi-token-refresh 刷新小米摄像头 token 并重启 go2rtc
 #   make token-watch-install 安装小米 token 过期监控
+#   make dashboard       启动本地 Web 控制台
 # ============================================================
 
 SHELL := /bin/bash
@@ -29,7 +30,8 @@ endif
 .PHONY: help setup up down restart logs check config net-test \
         detector-install detector-start detector-stop \
         xiaomi-token-refresh token-watch-run token-watch-install \
-        token-watch-start token-watch-stop token-watch-status
+        token-watch-start token-watch-stop token-watch-status \
+        dashboard dashboard-open dashboard-status
 
 help: ## 显示帮助信息
 	@echo ""
@@ -115,3 +117,12 @@ status: ## 查看所有服务状态概览
 		echo "  未运行"; \
 	fi
 	@echo ""
+
+dashboard: ## 启动本地 Web 控制台（仅监听 127.0.0.1:8765）
+	@python3 dashboard/server.py
+
+dashboard-open: ## 在浏览器打开本地 Web 控制台
+	@open http://127.0.0.1:8765
+
+dashboard-status: ## 输出控制台使用的结构化状态 JSON
+	@python3 dashboard/server.py --check

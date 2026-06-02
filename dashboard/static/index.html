@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>smartHome2 控制台</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">smartHome2</p>
+          <h1>智能灯控服务控制台</h1>
+        </div>
+        <div class="summary" id="summary">
+          <span class="dot unknown"></span>
+          <span>读取中</span>
+        </div>
+      </header>
+
+      <section class="toolbar" aria-label="全局操作">
+        <button data-action="start-all" class="primary">启动全部</button>
+        <button data-action="restart-all">重启全部</button>
+        <button data-action="stop-all" class="danger">停止全部</button>
+        <button id="refresh-status">刷新状态</button>
+        <span id="last-refresh" class="muted">尚未刷新</span>
+      </section>
+
+      <section class="grid two">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>核心服务</h2>
+            <span class="muted">Docker / go2rtc / Detector / token watch</span>
+          </div>
+          <div id="service-list" class="cards"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>诊断状态</h2>
+            <span class="muted">网络、API、摄像头、存储</span>
+          </div>
+          <div id="diagnostic-list" class="cards compact"></div>
+        </div>
+      </section>
+
+      <section class="panel token-panel">
+        <div class="panel-head">
+          <div>
+            <h2>小米 token 刷新</h2>
+            <span class="muted">会自动写入 go2rtc 配置、重启 go2rtc，并检查新的 401</span>
+          </div>
+          <div class="button-row">
+            <button id="token-start" class="primary">刷新小米 token</button>
+            <button id="token-stop" class="danger">停止刷新</button>
+          </div>
+        </div>
+        <div class="token-inputs">
+          <input id="token-input" type="password" autocomplete="off" placeholder="按输出提示输入账号、密码或验证码">
+          <button id="token-send">发送输入</button>
+        </div>
+        <pre id="token-output" class="terminal">尚未启动 token 刷新会话。</pre>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>日志</h2>
+          <div class="button-row">
+            <select id="log-select" aria-label="日志类型">
+              <option value="go2rtc">go2rtc.log</option>
+              <option value="go2rtc-error">go2rtc.error.log</option>
+              <option value="token-watch">xiaomi-token-watch.log</option>
+              <option value="token-watch-error">xiaomi-token-watch.error.log</option>
+            </select>
+            <button id="refresh-log">刷新日志</button>
+          </div>
+        </div>
+        <pre id="log-output" class="terminal">请选择日志。</pre>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>命令输出</h2>
+          <span class="muted">最近一次按钮操作</span>
+        </div>
+        <pre id="action-output" class="terminal">尚未执行操作。</pre>
+      </section>
+    </main>
+    <script src="/static/app.js?v=2"></script>
+  </body>
+</html>
