@@ -450,6 +450,31 @@ curl -s http://127.0.0.1:1984/api/log | tail -5
 # 如果出现 "read udp: i/o timeout" 则是摄像头网络问题，非 token 问题
 ```
 
+**更省事的方式：一条命令刷新、写入、重启并检查**
+
+```bash
+make xiaomi-token-refresh
+```
+
+此命令会运行 `scripts/get_xiaomi_token.py --yes --restart --check`：
+
+- 输入小米账号、密码和验证码
+- 自动写入 `go2rtc/config.yml`
+- 自动重启 `com.go2rtc`
+- 检查重启后的新日志里是否还有 `401 Unauthorized`
+
+**Token 过期提醒**
+
+已提供 launchd 定时监控，每 10 分钟检查一次 go2rtc 是否离线、最近日志是否出现
+`401 Unauthorized`。发现问题后会通过 Home Assistant 的 persistent notification 提醒。
+
+```bash
+make token-watch-install   # 安装并启动定时监控
+make token-watch-status    # 查看是否已加载
+make token-watch-run       # 立即手动运行一次检查
+make token-watch-stop      # 停止监控
+```
+
 **脚本依赖**：首次使用需安装 `requests` 库：
 
 ```bash

@@ -11,11 +11,15 @@ import os
 import random
 import re
 import string
+import argparse
+import subprocess
 import sys
+import time
 
 import requests
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "go2rtc", "config.yml")
+LOG_PATH = os.path.join(os.path.dirname(__file__), "..", "logs", "go2rtc.log")
 SID = "xiaomiio"
 BASE = "https://account.xiaomi.com"
 
@@ -217,13 +221,16 @@ def finish_auth_from_location(session, location):
     return {'user_id': user_id, 'pass_token': pass_token}
 
 
-def write_config(user_id, pass_token):
+def write_config(user_id, pass_token, auto_yes=False):
     config_path = os.path.abspath(CONFIG_PATH)
-    answer = input(f"\n是否自动写入 go2rtc 配置 ({config_path})? [y/N]: ").strip().lower()
+    if auto_yes:
+        answer = "y"
+    else:
+        answer = input(f"\n是否自动写入 go2rtc 配置 ({config_path})? [y/N]: ").strip().lower()
     if answer != "y":
         print(f'\n手动添加到 go2rtc config.yml 的 xiaomi 段:')
         print(f'  "{user_id}": {pass_token}')
-        return
+        return False
 
     try:
         with open(config_path, "r") as f:
@@ -240,12 +247,70 @@ def write_config(user_id, pass_token):
             f.write(new_content)
 
         print("已写入配置文件!")
+        return True
     except Exception as e:
         print(f"写入失败: {e}")
         print(f'\n手动添加到 go2rtc config.yml:\n  "{user_id}": {pass_token}')
+        return False
+
+
+def restart_go2rtc():
+    print("\n正在重启 go2rtc...")
+    subprocess.run(["launchctl", "stop", "com.go2rtc"], check=False)
+    time.sleep(1)
+    result = subprocess.run(["launchctl", "start", "com.go2rtc"], check=False)
+    if result.returncode == 0:
+        print("go2rtc 已重启")
+        return True
+
+    print("go2rtc 重启命令执行失败，请手动运行：")
+    print("  launchctl stop com.go2rtc && launchctl start com.go2rtc")
+    return False
+
+
+def check_go2rtc_log(before_size=0):
+    log_path = os.path.abspath(LOG_PATH)
+    time.sleep(8)
+
+    if not os.path.exists(log_path):
+        print(f"未找到 go2rtc 日志：{log_path}")
+        return False
+
+    with open(log_path, "rb") as f:
+        f.seek(0, os.SEEK_END)
+        size = f.tell()
+        f.seek(min(before_size, size))
+        new_log = f.read().decode("utf-8", errors="replace")
+
+    lines = [line for line in new_log.splitlines() if line.strip()]
+    recent = "\n".join(lines[-30:])
+
+    if "401 Unauthorized" in new_log:
+        print("\n刷新后仍检测到 401 Unauthorized：")
+        print(recent)
+        return False
+
+    print("\n刷新后未检测到新的 401 Unauthorized。")
+    if recent:
+        print("最近 go2rtc 日志：")
+        print(recent)
+    return True
+
+
+def current_log_size():
+    log_path = os.path.abspath(LOG_PATH)
+    if not os.path.exists(log_path):
+        return 0
+    return os.path.getsize(log_path)
 
 
 def main():
+    parser = argparse.ArgumentParser(description="刷新小米 passToken 并可自动重启 go2rtc")
+    parser.add_argument("--yes", "-y", action="store_true", help="自动写入 go2rtc/config.yml")
+    parser.add_argument("--restart", action="store_true", help="写入后自动重启 go2rtc")
+    parser.add_argument("--check", action="store_true", help="重启后检查是否仍出现新的 401")
+    args = parser.parse_args()
+
     username = input("小米账号 (手机号或邮箱): ").strip()
     password = getpass.getpass("密码: ")
 
@@ -264,10 +329,16 @@ def main():
     print(f"passToken: {pass_token[:30]}...")
     print(f"{'='*40}")
 
-    write_config(user_id, pass_token)
+    before_size = current_log_size()
+    wrote = write_config(user_id, pass_token, auto_yes=args.yes)
 
-    print("\n下一步: 重启 go2rtc")
-    print("  launchctl stop com.go2rtc && launchctl start com.go2rtc")
+    if args.restart and wrote:
+        restart_go2rtc()
+        if args.check:
+            check_go2rtc_log(before_size)
+    elif wrote:
+        print("\n下一步: 重启 go2rtc")
+        print("  launchctl stop com.go2rtc && launchctl start com.go2rtc")
 
 
 if __name__ == "__main__":

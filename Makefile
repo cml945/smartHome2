@@ -12,6 +12,8 @@
 #   make detector-install 安装 Apple Silicon Detector
 #   make detector-start  启动 Detector 服务
 #   make detector-stop   停止 Detector 服务
+#   make xiaomi-token-refresh 刷新小米摄像头 token 并重启 go2rtc
+#   make token-watch-install 安装小米 token 过期监控
 # ============================================================
 
 SHELL := /bin/bash
@@ -25,7 +27,9 @@ ifneq (,$(wildcard $(DOCKER_DIR)/docker-compose.override.yml))
 endif
 
 .PHONY: help setup up down restart logs check config net-test \
-        detector-install detector-start detector-stop
+        detector-install detector-start detector-stop \
+        xiaomi-token-refresh token-watch-run token-watch-install \
+        token-watch-start token-watch-stop token-watch-status
 
 help: ## 显示帮助信息
 	@echo ""
@@ -75,6 +79,29 @@ detector-stop: ## 停止 Detector 服务（launchd）
 
 detector-logs: ## 查看 Detector 日志
 	@tail -f ~/Library/Logs/frigate-detector.log
+
+xiaomi-token-refresh: ## 刷新小米摄像头 token，写入配置，重启并检查 go2rtc
+	@python3 scripts/get_xiaomi_token.py --yes --restart --check
+
+token-watch-run: ## 立即运行一次小米 token 监控
+	@bash scripts/xiaomi-token-watch.sh
+
+token-watch-install: ## 安装小米 token 过期监控（launchd，每 10 分钟）
+	@chmod +x scripts/xiaomi-token-watch.sh
+	@cp go2rtc/com.xiaomi-token-watch.plist ~/Library/LaunchAgents/com.xiaomi-token-watch.plist
+	@launchctl unload ~/Library/LaunchAgents/com.xiaomi-token-watch.plist 2>/dev/null || true
+	@launchctl load ~/Library/LaunchAgents/com.xiaomi-token-watch.plist
+	@echo "小米 token 监控已安装并启动"
+
+token-watch-start: ## 启动小米 token 监控
+	launchctl load ~/Library/LaunchAgents/com.xiaomi-token-watch.plist
+
+token-watch-stop: ## 停止小米 token 监控
+	launchctl unload ~/Library/LaunchAgents/com.xiaomi-token-watch.plist
+
+token-watch-status: ## 查看小米 token 监控状态
+	@launchctl print gui/$$(id -u)/com.xiaomi-token-watch >/dev/null 2>&1 && \
+		echo "已安装（launchd 定时任务，每 10 分钟运行一次）" || echo "未安装或未加载"
 
 status: ## 查看所有服务状态概览
 	@echo ""
