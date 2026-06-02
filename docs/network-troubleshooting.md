@@ -7,7 +7,8 @@
 ```
 小米摄像头 ──── P2P/cs2 (局域网) ────▶ go2rtc (:1984)
 go2rtc     ──── RTSP (本地回环)  ────▶ Frigate (:8971)
-Frigate    ──── MQTT             ────▶ HA Mosquitto (:1883)
+Frigate    ──── MQTT             ────▶ Docker Mosquitto (:1883)
+HA         ──── MQTT             ────▶ Docker Mosquitto (:1883)
 HA         ──── MIoT (局域网/云)  ────▶ 蓝牙网关 → 灯具
 ```
 
@@ -27,25 +28,36 @@ make net-test  # 自动化网络诊断
 
 ## 常见问题
 
-### 问题 1：Frigate 容器无法连接 HA 的 MQTT
+### 问题 1：Frigate 或 HA 无法连接 MQTT
 
 **现象：** Frigate 日志中出现 MQTT 连接超时
 
-**原因：** OrbStack 容器和 UTM 虚拟机处于不同的虚拟网络中
+**原因：** 当前 Mosquitto 运行在 Docker Compose 中，不再使用 Home Assistant 内置 broker。Frigate 在同一 Docker 网络内访问 `mosquitto:1883`，HA 需要通过 Mac 的局域网 IP 访问 `${MQTT_PORT:-1883}`。
 
 **解决方案：**
 
-**方案 A（先试）：** OrbStack 容器的出站流量通过 macOS NAT，通常可以直接访问 UTM 桥接模式的 IP。确认 Frigate config 中 `mqtt.host` 填写的是 UTM 虚拟机的局域网 IP（如 `192.168.1.200`）。
+**方案 A（先试）：** 确认 Mosquitto 容器已启动，并且 Mac 本机端口可达：
+```bash
+docker compose -f docker/docker-compose.yml up -d mosquitto
+nc -z 127.0.0.1 1883
+```
 
-**方案 B：** 如果方案 A 不通，在 `docker/docker-compose.override.yml` 中使用 host 网络模式：
+**方案 B：** 确认 Frigate 配置中的 MQTT host 为同一 compose 网络内的服务名：
+```yaml
+mqtt:
+  host: mosquitto
+  port: 1883
+```
+
+**方案 C：** 在 Home Assistant 的 MQTT 集成中配置 broker 为 Mac 的局域网 IP，端口为 `1883`。不要在 HA 中配置 `localhost`，那会指向 UTM VM 自身。
+
+**备选：** 如果需要排查 OrbStack 网络问题，可在 `docker/docker-compose.override.yml` 中临时使用 host 网络模式：
 ```yaml
 services:
   frigate:
     network_mode: host
 ```
 注意：使用 host 模式时需要移除 `ports:` 映射。
-
-**方案 C：** 将 HA 也迁移到 OrbStack 中运行（OrbStack 支持运行 Linux 虚拟机），让所有组件在同一网络栈。
 
 ### 问题 2：HA 的 Frigate Integration 无法连接 Frigate API
 
@@ -125,5 +137,5 @@ export http_proxy=http://127.0.0.1:7890
 | 1984 | go2rtc Web UI | 摄像头发现和调试 |
 | 8555 | WebRTC | 实时视频流 |
 | 5555 | ZeroMQ | Detector 通信端口 |
-| 1883 | MQTT | Mosquitto Broker（在 HA 中）|
+| 1883 | MQTT | Docker Mosquitto Broker（Mac 本机映射）|
 | 8123 | HA Web UI | Home Assistant 管理界面 |

@@ -1,0 +1,16 @@
+# go2rtc 独立配置示例
+# 负责接入小米摄像头并提供 RTSP 流给 Frigate。
+# 首次使用请复制为 go2rtc/config.yml，再打开 WebUI 添加摄像头：
+#   cp go2rtc/config.example.yml go2rtc/config.yml
+#   http://localhost:1984 -> Add -> Xiaomi
+
+streams:
+  study_cam:
+    - xiaomi://YOUR_XIAOMI_USER_ID:cn@CAMERA_IP?did=DEVICE_ID&model=CAMERA_MODEL
+  living_room_cam:
+    - xiaomi://YOUR_XIAOMI_USER_ID:cn@CAMERA_IP?did=DEVICE_ID&model=CAMERA_MODEL
+
+# 小米 passToken 会由 go2rtc WebUI 或 scripts/get_xiaomi_token.py 写入。
+# 不要提交真实 token。
+xiaomi:
+  "YOUR_XIAOMI_USER_ID": V1:REPLACE_WITH_PASS_TOKEN

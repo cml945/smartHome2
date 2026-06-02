@@ -78,37 +78,32 @@ else
 fi
 
 # MQTT
-if nc -z -w 3 "$HA_IP" "$MQTT_PORT" 2>/dev/null; then
-    pass "MQTT ($HA_IP:$MQTT_PORT) - 可达"
+if nc -z -w 3 "127.0.0.1" "$MQTT_PORT" 2>/dev/null; then
+    pass "Docker Mosquitto (127.0.0.1:$MQTT_PORT) - 可达"
 else
-    fail "MQTT ($HA_IP:$MQTT_PORT) - 不可达"
-    warn "请确认 HA 的 Mosquitto Add-on 已安装并启动"
+    fail "Docker Mosquitto (127.0.0.1:$MQTT_PORT) - 不可达"
+    warn "请确认 Mosquitto 容器已启动：docker compose -f docker/docker-compose.yml up -d mosquitto"
 fi
 echo ""
 
-# ===== 3. Docker 容器 -> HA =====
-echo ">> 测试 3：Docker 容器 (Frigate) -> Home Assistant"
+# ===== 3. Docker 容器内部连通性 =====
+echo ">> 测试 3：Docker 容器内部连通性"
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "frigate"; then
-    # ping
+    # Frigate -> Home Assistant
     if docker exec frigate ping -c 2 -W 3 "$HA_IP" &>/dev/null 2>&1; then
         pass "容器 -> HA ping ($HA_IP) - 可达"
     else
         fail "容器 -> HA ping ($HA_IP) - 不可达"
         warn "OrbStack 容器无法访问 UTM VM IP"
-        warn "方案 A：尝试 docker-compose.override.yml 中使用 network_mode: host"
-        warn "方案 B：将 HA 迁移到 OrbStack（同一网络栈）"
+        warn "这只影响容器主动访问 HA；HA 的 Frigate Integration 仍可通过 Mac 局域网 IP 访问 Frigate API"
     fi
 
-    # MQTT
-    if docker exec frigate sh -c "echo > /dev/tcp/$HA_IP/$MQTT_PORT" &>/dev/null 2>&1; then
-        pass "容器 -> MQTT ($HA_IP:$MQTT_PORT) - 可达"
+    # Frigate -> Docker Mosquitto
+    if docker exec frigate python3 -c "import socket; s=socket.create_connection(('mosquitto', 1883), 3); s.close()" &>/dev/null 2>&1; then
+        pass "容器 -> Mosquitto (mosquitto:1883) - 可达"
     else
-        # 备用检测方式
-        if docker exec frigate nc -z -w 3 "$HA_IP" "$MQTT_PORT" &>/dev/null 2>&1; then
-            pass "容器 -> MQTT ($HA_IP:$MQTT_PORT) - 可达"
-        else
-            fail "容器 -> MQTT ($HA_IP:$MQTT_PORT) - 不可达"
-        fi
+        fail "容器 -> Mosquitto (mosquitto:1883) - 不可达"
+        warn "检查 docker/docker-compose.yml 中 Frigate 是否依赖同一 compose 网络里的 mosquitto 服务"
     fi
 
     # host.docker.internal 解析
@@ -152,7 +147,7 @@ echo " 如果所有测试通过，系统网络配置正确。"
 echo ""
 echo " 常见问题："
 echo "   - 容器无法访问 UTM VM：尝试 network_mode: host"
-echo "   - MQTT 不通：检查 HA Mosquitto Add-on 配置"
+echo "   - MQTT 不通：检查 Docker Mosquitto 容器和端口映射"
 echo "   - 摄像头不通：确认摄像头和 Mac 在同一局域网"
 echo "   - 镜像拉取失败：开启系统代理后重试"
 echo ""

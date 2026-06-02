@@ -18,6 +18,10 @@ detector/*.dmg
 # go2rtc 二进制
 bin/
 
+# go2rtc 本地配置（含摄像头 DID、IP 和小米 passToken）
+go2rtc/config.yml
+!go2rtc/config.example.yml
+
 # 日志
 *.log
 logs/

@@ -48,7 +48,7 @@
 ```yaml
 streams:
   study_cam:
-    - xiaomi://1280623889:cn@192.168.31.9?did=268058994&model=chuangmi.camera.ipc021
+    - xiaomi://USER_ID:cn@CAMERA_IP?did=DEVICE_ID&model=MODEL
   # 新增摄像头：流名称将作为 Frigate RTSP 路径的一部分
   living_room_cam:
     - xiaomi://USER_ID:cn@CAMERA_IP?did=DEVICE_ID&model=MODEL
@@ -110,7 +110,7 @@ cameras:
 docker restart frigate
 ```
 
-**验证**：打开 Frigate WebUI（https://192.168.31.233:8971），确认新摄像头出现且有画面。
+**验证**：打开 Frigate WebUI（http://192.168.31.233:8971，替换为你的 Mac 局域网 IP），确认新摄像头出现且有画面。
 
 ### 4. 重新加载 HA Frigate 集成
 
@@ -190,7 +190,7 @@ Frigate 使用归一化坐标 (0.0~1.0) 定义多边形区域：
 
 ### 方法 A：通过 Frigate WebUI 绘制（推荐）
 
-1. 打开 https://192.168.31.233:8971
+1. 打开 http://192.168.31.233:8971（替换为你的 Mac 局域网 IP）
 2. 登录后点击左下角 **Settings**（齿轮）
 3. 选择 **Mask / Zone editor** 标签
 4. 选择目标摄像头
@@ -482,7 +482,7 @@ pip3 install requests
 ```
 
 **注意事项**：
-- 登录时必须使用**手机号**（如 `17342016281`），不能用数字用户 ID（如 `1280623889`）
+- 登录时必须使用**手机号**，不能用数字用户 ID
 - 小米可能要求短信验证码（flag=4）或邮箱验证码（flag=8），按提示操作即可
 - Token 约 3 天过期一次，目前需要手动重新执行脚本刷新
 - 相关上游 issue：[#2233](https://github.com/AlexxIT/go2rtc/issues/2233)（token 自动刷新）、
@@ -591,5 +591,5 @@ curl -s -X POST "http://${HA_IP}:8123/api/services/switch/turn_on" \
   -d '{"entity_id": "switch.your_entity_id"}'
 
 # ====== Frigate WebUI ======
-# https://192.168.31.233:8971 (admin / 查看 docker logs frigate 中的 Password)
+# http://192.168.31.233:8971 (admin / 查看 docker logs frigate 中的 Password)
 ```

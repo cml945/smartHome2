@@ -32,7 +32,7 @@ automation:
     id: pkg_presence_living_room_sofa_on
     trigger:
       - platform: state
-        entity_id: binary_sensor.living_room_sofa_area_person_occupancy
+        entity_id: binary_sensor.sofa_area_person_occupancy
         to: "on"
     condition:
       - condition: state
@@ -54,7 +54,7 @@ automation:
     id: pkg_presence_living_room_sofa_off
     trigger:
       - platform: state
-        entity_id: binary_sensor.living_room_sofa_area_person_occupancy
+        entity_id: binary_sensor.sofa_area_person_occupancy
         to: "off"
         for:
           minutes: 3
@@ -100,7 +100,7 @@ automation:
     id: pkg_presence_living_room_dining_on
     trigger:
       - platform: state
-        entity_id: binary_sensor.living_room_dining_area_person_occupancy
+        entity_id: binary_sensor.dining_area_person_occupancy
         to: "on"
     condition:
       - condition: state
@@ -122,7 +122,7 @@ automation:
     id: pkg_presence_living_room_dining_off
     trigger:
       - platform: state
-        entity_id: binary_sensor.living_room_dining_area_person_occupancy
+        entity_id: binary_sensor.dining_area_person_occupancy
         to: "off"
         for:
           minutes: 3
@@ -141,7 +141,7 @@ automation:
     id: pkg_presence_bedroom_bed_on
     trigger:
       - platform: state
-        entity_id: binary_sensor.bedroom_bed_area_person_occupancy
+        entity_id: binary_sensor.bed_area_person_occupancy
         to: "on"
     condition:
       - condition: state
@@ -176,7 +176,7 @@ automation:
     id: pkg_presence_bedroom_bed_off
     trigger:
       - platform: state
-        entity_id: binary_sensor.bedroom_bed_area_person_occupancy
+        entity_id: binary_sensor.bed_area_person_occupancy
         to: "off"
         for:
           minutes: 5
@@ -236,7 +236,7 @@ automation:
     id: pkg_presence_study_desk_on
     trigger:
       - platform: state
-        entity_id: binary_sensor.study_desk_area_person_occupancy
+        entity_id: binary_sensor.desk_area_person_occupancy
         to: "on"
     condition:
       - condition: state
@@ -258,7 +258,7 @@ automation:
     id: pkg_presence_study_desk_off
     trigger:
       - platform: state
-        entity_id: binary_sensor.study_desk_area_person_occupancy
+        entity_id: binary_sensor.desk_area_person_occupancy
         to: "off"
         for:
           minutes: 5

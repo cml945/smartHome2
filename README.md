@@ -18,14 +18,14 @@
 │  │                               │  │                            │ │
 │  │  ┌─────────────────────────┐ │  │  ┌──────────────────────┐ │ │
 │  │  │  Docker (OrbStack)       │ │  │  │  Home Assistant       │ │ │
-│  │  │  ┌────────┐ ┌────────┐  │ │  │  │  - Frigate 集成       │ │ │
-│  │  │  │ go2rtc │→│Frigate │──│─│──│─▶│  - ha_xiaomi_home    │ │ │
-│  │  │  └────────┘ └────────┘  │ │  │  │  - Mosquitto MQTT    │ │ │
+│  │  │  ┌──────────┐ ┌────────┐│ │  │  │  - Frigate 集成       │ │ │
+│  │  │  │Mosquitto │ │Frigate ││─│──│─▶│  - ha_xiaomi_home    │ │ │
+│  │  │  └──────────┘ └────────┘│ │  │  │  - MQTT 客户端        │ │ │
 │  │  └─────────────────────────┘ │  │  │  - 自动化规则         │ │ │
 │  │                               │  │  └──────────────────────┘ │ │
 │  │  ┌─────────────────────────┐ │  └────────────────────────────┘ │
-│  │  │  Apple Silicon Detector  │ │                                  │
-│  │  │  (YOLOv9, Neural Engine) │ │                                  │
+│  │  │  go2rtc / Detector(可选) │ │                                  │
+│  │  │  (macOS 原生运行)        │ │                                  │
 │  │  └─────────────────────────┘ │                                  │
 │  └─────────────────────────────┘                                  │
 └──────────────────────────────────────────────────────────────────┘
@@ -55,6 +55,8 @@ cd smartHome2
 ```bash
 cp .env.example .env
 # 编辑 .env，填写你的实际参数（小米账号、摄像头 IP、HA IP 等）
+cp go2rtc/config.example.yml go2rtc/config.yml
+# 稍后通过 go2rtc WebUI 或 token 刷新脚本写入真实摄像头流和小米 token
 ```
 
 ### 3. 一键安装
@@ -67,7 +69,7 @@ make setup
 - 检查系统环境（macOS、Apple Silicon）
 - 引导安装 OrbStack（如未安装）
 - 从 `.env` 生成 Frigate 配置
-- 安装 Apple Silicon Detector
+- 检查或安装 Apple Silicon Detector（当前 Frigate 0.15.0 默认使用 CPU detector，可选）
 - 启动 Frigate Docker 容器
 
 > 如遇镜像拉取困难，请确保系统代理已开启。OrbStack 会自动继承 macOS 系统代理设置。
@@ -127,7 +129,7 @@ make dashboard
 
 健康检查口径：
 - Docker、Frigate、Mosquitto、go2rtc、token 监控会显示运行状态
-- Frigate Web UI 使用 HTTPS 访问：`https://127.0.0.1:8971`
+- Frigate Web UI 优先使用 HTTP 访问：`http://127.0.0.1:8971`；HTTP 不通时才回退尝试 HTTPS
 - Mosquitto 默认检查本机端口：`127.0.0.1:1883`
 - Home Assistant API 返回 `401/403` 也视为可达，因为这说明服务在线但需要认证
 - 如果 Frigate 配置使用 `cpu_detector`，独立 Apple Silicon Detector 未运行不会被视为故障
@@ -152,6 +154,8 @@ smartHome2/
 │   └── docker-compose.yml        # Frigate 容器部署
 ├── frigate/
 │   └── config.example.yml        # Frigate 配置模板
+├── go2rtc/
+│   └── config.example.yml        # go2rtc 本地配置模板（真实 config.yml 不提交）
 ├── homeassistant/
 │   ├── automations/              # HA 自动化模板
 │   └── packages/                 # HA packages（推荐方式）
@@ -191,7 +195,7 @@ smartHome2/
 ### 添加/删除摄像头
 
 1. 编辑 `.env`，添加或删除摄像头的 IP/DID/Model 配置
-2. 编辑 `frigate/config.example.yml`，添加或删除对应的 go2rtc stream 和 camera 配置
+2. 编辑 `go2rtc/config.yml` 添加或删除 stream，并编辑 `frigate/config.example.yml` 中对应的 camera 配置
 3. 运行 `make config` 重新生成配置
 4. 运行 `make restart` 重启 Frigate
 
@@ -216,7 +220,7 @@ smartHome2/
 |------|---------|------|
 | CPU (M4) | ~15-25% | Frigate 解码 + go2rtc 转发 |
 | Neural Engine | ~5-10% | YOLOv9 推理（每路 1FPS） |
-| 内存 | ~2-3GB | Frigate + go2rtc 容器 |
+| 内存 | ~2-3GB | Frigate + Mosquitto 容器 + go2rtc 原生进程 |
 | 端到端延迟 | <1s | 从摄像头抓帧到灯具响应 |
 
 ## License

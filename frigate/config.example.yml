@@ -15,17 +15,17 @@ mqtt:
   port: 1883
 
 # ---------- go2rtc ----------
-# 视频流由独立的 go2rtc 容器提供（支持小米 xiaomi:// 协议）
-# go2rtc 使用 host 网络模式以支持 P2P UDP 协议
+# 视频流由 macOS 宿主机上的独立 go2rtc 提供（支持小米 xiaomi:// 协议）
+# go2rtc 原生运行以支持 P2P UDP 协议
 # Frigate 通过 host.docker.internal 访问 go2rtc 的 RTSP 输出
 
 # ---------- 检测器配置 ----------
 # 当前使用 CPU 检测器（Frigate 0.15.0 不支持 apple_silicon 类型）
-# 升级到 Frigate 0.17+ 后可改用 apple_silicon 检测器以提升性能
+# 升级到支持 Apple Silicon detector 的 Frigate 版本后，可改用 apple_silicon 检测器以提升性能
 detectors:
   cpu_detector:
     type: cpu
-  # apple_silicon（需 Frigate 0.17+）:
+  # apple_silicon（需支持 Apple Silicon detector 的 Frigate 版本）:
   # apple_silicon:
   #   type: apple_silicon
   #   address: host.docker.internal:${DETECTOR_ZMQ_PORT}

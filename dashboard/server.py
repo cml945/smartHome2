@@ -23,7 +23,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from urllib.request import Request, urlopen
 
 
@@ -347,19 +347,12 @@ def collect_status() -> Dict[str, Any]:
     ))
 
     mqtt_local_ok = tcp_check("127.0.0.1", mqtt_port, timeout=3)
-    mqtt_ha_ok = tcp_check(ha_ip, mqtt_port, timeout=3) if ha_ip not in ("127.0.0.1", "localhost") else mqtt_local_ok
-    mqtt_ok = mqtt_local_ok or mqtt_ha_ok
-    mqtt_detail = (
-        f"本机 Mosquitto 127.0.0.1:{mqtt_port} 可达"
-        if mqtt_local_ok
-        else (f"{ha_ip}:{mqtt_port} 可达" if mqtt_ha_ok else f"127.0.0.1:{mqtt_port} 和 {ha_ip}:{mqtt_port} 均不可达")
-    )
     items.append(status_item(
         "mqtt",
         "MQTT Broker",
-        "ok" if mqtt_ok else "fail",
-        mqtt_detail,
-        "" if mqtt_ok else "检查 Mosquitto 容器、HA MQTT 配置和端口。",
+        "ok" if mqtt_local_ok else "fail",
+        f"Docker Mosquitto 127.0.0.1:{mqtt_port} 可达" if mqtt_local_ok else f"Docker Mosquitto 127.0.0.1:{mqtt_port} 不可达",
+        "" if mqtt_local_ok else "检查 Mosquitto 容器、端口映射和 HA MQTT broker 是否指向 Mac 局域网 IP。",
     ))
 
     ha_ok, ha_code, _ = http_status(f"http://{ha_ip}:8123/api/", timeout=5)
@@ -678,8 +671,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/":
             return str(STATIC_DIR / "index.html")
         if parsed.path.startswith("/static/"):
-            relative = parsed.path.removeprefix("/static/")
-            return str(STATIC_DIR / relative)
+            relative = unquote(parsed.path.removeprefix("/static/")).lstrip("/")
+            root = STATIC_DIR.resolve()
+            candidate = (root / relative).resolve()
+            try:
+                candidate.relative_to(root)
+            except ValueError:
+                return str(STATIC_DIR / "404")
+            return str(candidate)
         return str(STATIC_DIR / "404")
 
     def log_message(self, fmt: str, *args: Any) -> None:

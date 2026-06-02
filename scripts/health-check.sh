@@ -98,10 +98,18 @@ echo ""
 echo ">> MQTT Broker"
 HA_IP="${HA_IP:-192.168.1.200}"
 MQTT_PORT="${MQTT_PORT:-1883}"
-if nc -z -w 3 "$HA_IP" "$MQTT_PORT" 2>/dev/null; then
-    check_pass "MQTT Broker 可达 ($HA_IP:$MQTT_PORT)"
+if nc -z -w 3 "127.0.0.1" "$MQTT_PORT" 2>/dev/null; then
+    check_pass "本机 Docker Mosquitto 可达 (127.0.0.1:$MQTT_PORT)"
 else
-    check_fail "MQTT Broker 不可达 ($HA_IP:$MQTT_PORT)"
+    check_fail "本机 Docker Mosquitto 不可达 (127.0.0.1:$MQTT_PORT)"
+fi
+
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "frigate"; then
+    if docker exec frigate python3 -c "import socket; s=socket.create_connection(('mosquitto', 1883), 3); s.close()" &>/dev/null 2>&1; then
+        check_pass "Frigate 容器可访问 Mosquitto (mosquitto:1883)"
+    else
+        check_fail "Frigate 容器无法访问 Mosquitto (mosquitto:1883)"
+    fi
 fi
 echo ""
 
