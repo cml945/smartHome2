@@ -5,6 +5,12 @@ const stateLabels = {
   unknown: "未知",
 };
 
+const dashboardOrigin = "http://127.0.0.1:8765";
+
+if (window.location.protocol === "file:") {
+  window.location.replace(`${dashboardOrigin}/`);
+}
+
 const serviceActions = {
   frigate: [
     ["docker-start", "启动 Docker Compose"],
@@ -41,12 +47,18 @@ const els = {
   actionOutput: document.querySelector("#action-output"),
   tokenOutput: document.querySelector("#token-output"),
   tokenInput: document.querySelector("#token-input"),
+  tokenSendStatus: document.querySelector("#token-send-status"),
   logOutput: document.querySelector("#log-output"),
   logSelect: document.querySelector("#log-select"),
 };
 
 let busy = false;
 let tokenTimer = 0;
+let tokenInputSending = false;
+let tokenOutputBeforeSend = "";
+let lastTokenRawOutput = "";
+let tokenInputKind = "account";
+let lastSentTokenValue = "";
 
 function escapeHtml(value) {
   return String(value)
@@ -71,6 +83,61 @@ async function getJson(url, options = {}) {
     throw new Error(`${response.status} ${response.statusText}`);
   }
   return response.json();
+}
+
+function appendTokenOutput(message) {
+  const current = els.tokenOutput.textContent || "";
+  els.tokenOutput.textContent = `${current}${current ? "\n" : ""}${message}`;
+  els.tokenOutput.scrollTop = els.tokenOutput.scrollHeight;
+}
+
+function setTokenSendStatus(message, tone = "") {
+  els.tokenSendStatus.textContent = message || "";
+  els.tokenSendStatus.className = `muted send-status ${tone}`.trim();
+}
+
+function updateTokenInputMode(output, serverPrompt = "") {
+  const lines = String(output || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const latestPrompt = lines[lines.length - 1] || "";
+  let nextKind = serverPrompt || tokenInputKind;
+
+  if (!serverPrompt) {
+    if (/请输入收到的验证码|验证码|ticket/i.test(latestPrompt)) {
+      nextKind = "code";
+    } else if (/密码|password/i.test(latestPrompt)) {
+      nextKind = "password";
+    } else if (/小米账号|手机号|邮箱/i.test(latestPrompt)) {
+      nextKind = /:\s*\S+\s*$/.test(latestPrompt) ? "password" : "account";
+    } else if (/正在登录小米云端|提交登录请求|安全身份验证|获取最终 token/i.test(latestPrompt)) {
+      nextKind = "waiting";
+    }
+  }
+
+  if (tokenInputKind !== nextKind) {
+    tokenInputKind = nextKind;
+    if (nextKind === "password" && els.tokenInput.value === lastSentTokenValue) {
+      els.tokenInput.value = "";
+    }
+  }
+
+  if (nextKind === "password") {
+    els.tokenInput.type = "password";
+    els.tokenInput.placeholder = "请输入小米账号密码（输入内容会隐藏）";
+    if (!tokenInputSending) setTokenSendStatus("账号已提交，请输入密码。", "pending");
+  } else if (nextKind === "code") {
+    els.tokenInput.type = "text";
+    els.tokenInput.placeholder = "请输入短信或邮箱验证码";
+    if (!tokenInputSending) setTokenSendStatus("请输入收到的验证码。", "pending");
+  } else if (nextKind === "waiting") {
+    els.tokenInput.type = "text";
+    els.tokenInput.placeholder = "正在处理，请等待脚本下一步提示";
+  } else {
+    els.tokenInput.type = "text";
+    els.tokenInput.placeholder = "请输入小米账号、手机号或邮箱";
+  }
 }
 
 async function refreshStatus() {
@@ -156,19 +223,43 @@ function setButtonsDisabled(disabled) {
 async function startTokenRefresh() {
   const data = await getJson("/api/token/start", { method: "POST" });
   els.tokenOutput.textContent = data.message || "token 刷新会话已启动。";
+  setTokenSendStatus("");
+  updateTokenInputMode(els.tokenOutput.textContent);
   pollToken();
 }
 
 async function sendTokenInput() {
   const value = els.tokenInput.value;
-  if (!value) return;
-  els.tokenInput.value = "";
-  await getJson("/api/token/input", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ value }),
-  });
-  pollToken();
+  if (!value || tokenInputSending) return;
+  const inputKind = tokenInputKind === "password" || els.tokenInput.type === "password" ? "password" : tokenInputKind;
+  const wasPassword = inputKind === "password";
+  tokenInputSending = true;
+  lastSentTokenValue = value;
+  tokenOutputBeforeSend = lastTokenRawOutput;
+  const sendButton = document.querySelector("#token-send");
+  sendButton.disabled = true;
+  sendButton.textContent = "发送中...";
+  setTokenSendStatus("已发送，等待脚本响应...", "pending");
+  try {
+    const data = await getJson("/api/token/input", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value, kind: inputKind }),
+    });
+    if (!data.ok) {
+      setTokenSendStatus(data.message || "输入未被接收。", "error");
+    } else if (wasPassword) {
+      els.tokenInput.value = "";
+    }
+    await pollToken();
+  } catch (error) {
+    setTokenSendStatus(`发送输入失败：${error.message}`, "error");
+  } finally {
+    tokenInputSending = false;
+    sendButton.disabled = false;
+    sendButton.textContent = "发送输入";
+    els.tokenInput.focus();
+  }
 }
 
 async function stopTokenRefresh() {
@@ -181,7 +272,15 @@ async function pollToken() {
   try {
     const data = await getJson("/api/token/status");
     const statusLine = data.running ? "运行中" : (data.exit_code === null ? "未运行" : `已结束，返回码 ${data.exit_code}`);
+    lastTokenRawOutput = data.output || "";
     els.tokenOutput.textContent = `[${statusLine}]\n${data.output || ""}`.trim();
+    updateTokenInputMode(data.output || "", data.prompt || "");
+    if (tokenOutputBeforeSend && (data.output || "") !== tokenOutputBeforeSend) {
+      if (!["password", "code"].includes(tokenInputKind)) {
+        setTokenSendStatus("脚本已响应。", "ok");
+      }
+      tokenOutputBeforeSend = "";
+    }
     els.tokenOutput.scrollTop = els.tokenOutput.scrollHeight;
     if (data.running) {
       window.clearTimeout(tokenTimer);

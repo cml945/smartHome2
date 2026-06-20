@@ -57,8 +57,9 @@
           </div>
         </div>
         <div class="token-inputs">
-          <input id="token-input" type="password" autocomplete="off" placeholder="按输出提示输入账号、密码或验证码">
+          <input id="token-input" type="text" autocomplete="off" placeholder="按输出提示输入账号、密码或验证码">
           <button id="token-send">发送输入</button>
+          <span id="token-send-status" class="muted"></span>
         </div>
         <pre id="token-output" class="terminal">尚未启动 token 刷新会话。</pre>
       </section>
@@ -87,6 +88,6 @@
         <pre id="action-output" class="terminal">尚未执行操作。</pre>
       </section>
     </main>
-    <script src="/static/app.js?v=2"></script>
+    <script src="/static/app.js?v=7"></script>
   </body>
 </html>

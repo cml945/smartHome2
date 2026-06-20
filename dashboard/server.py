@@ -10,13 +10,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pty
 import re
+import select
 import shutil
 import signal
 import socket
 import ssl
 import subprocess
 import sys
+import termios
 import threading
 import time
 from http import HTTPStatus
@@ -51,6 +54,10 @@ DEFAULT_PORT = 8765
 COMMAND_TIMEOUT = 45
 STATUS_TIMEOUT = 4
 OUTPUT_LIMIT = 16000
+TOKEN_PROMPT_ACCOUNT = "account"
+TOKEN_PROMPT_PASSWORD = "password"
+TOKEN_PROMPT_CODE = "code"
+TOKEN_PROMPT_WAITING = "waiting"
 
 
 def now_ms() -> int:
@@ -277,11 +284,18 @@ def collect_status() -> Dict[str, Any]:
 
     token_watch_loaded = launchd_loaded(TOKEN_WATCH_LABEL)
     token_state = read_token_state()
-    token_recent_401 = recent_log_contains(LOG_DIR / "go2rtc.log", "401 Unauthorized", 300)
-    if token_state == "xiaomi_401" or token_recent_401:
+    token_auth_errors = go2rtc_auth_errors_since_last_start(LOG_DIR / "go2rtc.log")
+    token_recent_401 = any(error["type"] == "401" for error in token_auth_errors)
+    token_recent_permit_deny = any(error["type"] == "permit_deny" for error in token_auth_errors)
+    token_error_streams = ", ".join(sorted({error["stream"] for error in token_auth_errors if error["stream"]}))
+    if token_recent_401:
         token_status = "fail"
-        token_detail = "检测到 401 Unauthorized，token 可能已过期"
+        token_detail = f"刷新后仍检测到 401 Unauthorized{f'：{token_error_streams}' if token_error_streams else ''}"
         token_hint = "使用下方刷新小米 token 功能。"
+    elif token_recent_permit_deny:
+        token_status = "fail"
+        token_detail = f"检测到摄像头权限/配置拒绝{f'：{token_error_streams}' if token_error_streams else ''}"
+        token_hint = "检查对应 stream 的 userId、IP、DID、model，以及摄像头是否属于当前小米账号。"
     elif token_state == "go2rtc_down":
         token_status = "warn"
         token_detail = "token 监控发现 go2rtc API 不可达"
@@ -394,6 +408,7 @@ def collect_status() -> Dict[str, Any]:
         "token": {
             "state_file": token_state or "",
             "recent_401": token_recent_401,
+            "auth_errors": token_auth_errors,
             "config_exists": GO2RTC_CONFIG.exists(),
         },
         "docker_message": docker_output[-1000:] if not docker_ok else "",
@@ -448,6 +463,26 @@ def read_token_state() -> str:
     return TOKEN_STATE_FILE.read_text(encoding="utf-8", errors="replace").strip()
 
 
+def go2rtc_auth_errors_since_last_start(path: Path) -> List[Dict[str, str]]:
+    lines = tail_lines(path, 600)
+    last_start = 0
+    for index, line in enumerate(lines):
+        if "INF go2rtc platform=" in line:
+            last_start = index
+
+    errors = []
+    for line in lines[last_start:]:
+        if "401 Unauthorized" not in line and "permit deny" not in line:
+            continue
+        stream_match = re.search(r"stream=([A-Za-z0-9_-]+)", line)
+        errors.append({
+            "type": "401" if "401 Unauthorized" in line else "permit_deny",
+            "stream": stream_match.group(1) if stream_match else "",
+            "line": line,
+        })
+    return errors
+
+
 def recent_log_contains(path: Path, needle: str, lines: int) -> bool:
     for line in tail_lines(path, lines):
         if needle in line:
@@ -475,19 +510,51 @@ def tail_lines(path: Path, lines: int = 80) -> List[str]:
         return [f"读取日志失败：{exc}"]
 
 
+def wait_status_to_exit_code(status: int) -> int:
+    if os.WIFEXITED(status):
+        return os.WEXITSTATUS(status)
+    if os.WIFSIGNALED(status):
+        return 128 + os.WTERMSIG(status)
+    return status
+
+
+def detect_token_prompt(output: str, current: str) -> str:
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    if not lines:
+        return current
+
+    tail = "\n".join(lines[-8:])
+    latest = lines[-1]
+
+    if re.search(r"请输入收到的验证码|验证码|ticket", tail, re.IGNORECASE):
+        return TOKEN_PROMPT_CODE
+    if re.search(r"密码|password", latest, re.IGNORECASE):
+        return TOKEN_PROMPT_PASSWORD
+    if re.search(r"小米账号.*:\s*\S+", latest):
+        return TOKEN_PROMPT_PASSWORD
+    if re.search(r"小米账号|手机号|邮箱", latest):
+        return TOKEN_PROMPT_ACCOUNT
+    if re.search(r"正在登录小米云端|获取登录签名|提交登录请求|安全身份验证|获取最终 token", tail):
+        return TOKEN_PROMPT_WAITING
+    return current
+
+
 class TokenRefreshSession:
     def __init__(self) -> None:
         self.lock = threading.Lock()
-        self.process: Optional[subprocess.Popen[str]] = None
+        self.pid: Optional[int] = None
+        self.master_fd: Optional[int] = None
         self.output = ""
+        self.last_prompt = TOKEN_PROMPT_ACCOUNT
         self.started_at = 0
         self.updated_at = 0
         self.exit_code: Optional[int] = None
         self.reader: Optional[threading.Thread] = None
+        self.redacted_values: List[str] = []
 
     def start(self) -> Dict[str, Any]:
         with self.lock:
-            if self.process and self.process.poll() is None:
+            if self.pid and self._is_running_locked():
                 return {"ok": False, "message": "已有 token 刷新会话正在运行。"}
 
             cmd = [
@@ -499,21 +566,22 @@ class TokenRefreshSession:
                 "--check",
             ]
             self.output = ""
+            self.redacted_values = []
+            self.last_prompt = TOKEN_PROMPT_ACCOUNT
             self.exit_code = None
             self.started_at = now_ms()
             self.updated_at = self.started_at
             try:
-                self.process = subprocess.Popen(
-                    cmd,
-                    cwd=str(PROJECT_DIR),
-                    text=True,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    bufsize=1,
-                )
+                pid, master_fd = pty.fork()
+                if pid == 0:
+                    os.chdir(str(PROJECT_DIR))
+                    os.execv(sys.executable, cmd)
+                self.pid = pid
+                self.master_fd = master_fd
+                os.set_blocking(master_fd, False)
             except Exception as exc:
-                self.process = None
+                self.pid = None
+                self.master_fd = None
                 self.exit_code = 1
                 self._append(f"启动刷新脚本失败：{exc}\n")
                 return {"ok": False, "message": str(exc)}
@@ -523,53 +591,151 @@ class TokenRefreshSession:
             return {"ok": True, "message": "token 刷新会话已启动。"}
 
     def _read_output(self) -> None:
-        proc = self.process
-        if not proc or not proc.stdout:
+        pid = self.pid
+        master_fd = self.master_fd
+        if not pid or master_fd is None:
             return
         try:
             while True:
-                chunk = proc.stdout.read(1)
+                ready, _, _ = select.select([master_fd], [], [], 0.2)
+                if not ready:
+                    with self.lock:
+                        if not self._is_running_locked():
+                            break
+                    continue
+                try:
+                    chunk = os.read(master_fd, 1024)
+                except BlockingIOError:
+                    continue
+                except OSError:
+                    break
                 if not chunk:
                     break
-                self._append(chunk)
+                self._append(chunk.decode("utf-8", errors="replace"))
         finally:
-            code = proc.wait()
+            code = self._reap_child(pid)
+            try:
+                os.close(master_fd)
+            except OSError:
+                pass
             with self.lock:
                 self.exit_code = code
+                self.pid = None
+                self.master_fd = None
                 self.updated_at = now_ms()
 
     def _append(self, text: str) -> None:
         with self.lock:
-            self.output = sanitize_output(self.output + text)[-OUTPUT_LIMIT:]
+            self.output = self._sanitize(self.output + text)[-OUTPUT_LIMIT:]
+            self.last_prompt = detect_token_prompt(self.output, self.last_prompt)
             self.updated_at = now_ms()
 
-    def send_input(self, value: str) -> Dict[str, Any]:
+    def _is_running_locked(self) -> bool:
+        if not self.pid:
+            return False
+        try:
+            pid, status = os.waitpid(self.pid, os.WNOHANG)
+        except ChildProcessError:
+            return False
+        if pid == 0:
+            return True
+        self.exit_code = wait_status_to_exit_code(status)
+        self.pid = None
+        return False
+
+    def _reap_child(self, pid: int) -> Optional[int]:
+        try:
+            _, status = os.waitpid(pid, 0)
+            return wait_status_to_exit_code(status)
+        except ChildProcessError:
+            return self.exit_code
+
+    def _sanitize(self, text: str) -> str:
+        text = sanitize_output(text)
+        for secret in self.redacted_values:
+            if secret:
+                text = text.replace(secret, "******")
+        return self._redact_password_echo(text)
+
+    def _redact_password_echo(self, text: str) -> str:
+        lines = text.splitlines()
+        redacted: List[str] = []
+        redact_next_standalone_line = False
+        safe_prefixes = (
+            "[",
+            "/",
+            "warning",
+            "正在",
+            "登录",
+            "result=",
+            "密码",
+            "请输入",
+            "Step",
+            "[Step",
+        )
+        for line in lines:
+            stripped = line.strip()
+            if redact_next_standalone_line and stripped:
+                if not any(stripped.startswith(prefix) for prefix in safe_prefixes):
+                    redacted.append(line.replace(stripped, "******"))
+                    redact_next_standalone_line = False
+                    continue
+                redact_next_standalone_line = False
+            redacted.append(line)
+            if re.search(r"小米账号.*:\s*\S+", stripped):
+                redact_next_standalone_line = True
+        if text.endswith("\n"):
+            return "\n".join(redacted) + "\n"
+        return "\n".join(redacted)
+
+    def _set_echo(self, enabled: bool) -> None:
+        if self.master_fd is None:
+            return
+        attrs = termios.tcgetattr(self.master_fd)
+        if enabled:
+            attrs[3] |= termios.ECHO
+        else:
+            attrs[3] &= ~termios.ECHO
+        termios.tcsetattr(self.master_fd, termios.TCSANOW, attrs)
+
+    def send_input(self, value: str, kind: str = "text") -> Dict[str, Any]:
         with self.lock:
-            if not self.process or self.process.poll() is not None or not self.process.stdin:
+            if not self.pid or not self._is_running_locked() or self.master_fd is None:
                 return {"ok": False, "message": "没有正在等待输入的 token 刷新会话。"}
             try:
-                self.process.stdin.write(value + "\n")
-                self.process.stdin.flush()
+                if kind == "password":
+                    self.redacted_values.append(value)
+                    self._set_echo(False)
+                else:
+                    self._set_echo(True)
+                os.write(self.master_fd, (value + "\n").encode("utf-8"))
                 return {"ok": True, "message": "已发送输入。"}
             except Exception as exc:
                 return {"ok": False, "message": f"发送输入失败：{exc}"}
 
     def stop(self) -> Dict[str, Any]:
         with self.lock:
-            if not self.process or self.process.poll() is not None:
+            if not self.pid or not self._is_running_locked():
                 return {"ok": False, "message": "没有正在运行的 token 刷新会话。"}
-            self.process.send_signal(signal.SIGTERM)
+            os.kill(self.pid, signal.SIGTERM)
+            if self.master_fd is not None:
+                try:
+                    os.close(self.master_fd)
+                except OSError:
+                    pass
+                self.master_fd = None
             return {"ok": True, "message": "已请求停止 token 刷新会话。"}
 
     def status(self) -> Dict[str, Any]:
         with self.lock:
-            running = bool(self.process and self.process.poll() is None)
+            running = self._is_running_locked()
             return {
                 "running": running,
                 "started_at": self.started_at,
                 "updated_at": self.updated_at,
                 "exit_code": self.exit_code,
-                "output": self.output,
+                "output": self._sanitize(self.output),
+                "prompt": self.last_prompt,
             }
 
 
@@ -716,7 +882,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/token/input":
             data = self.read_json()
             value = str(data.get("value", ""))
-            self.send_json(TOKEN_SESSION.send_input(value))
+            kind = str(data.get("kind", "text"))
+            self.send_json(TOKEN_SESSION.send_input(value, kind))
             return
         if parsed.path == "/api/token/stop":
             self.send_json(TOKEN_SESSION.stop())

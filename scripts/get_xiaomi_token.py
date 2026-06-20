@@ -15,11 +15,13 @@ import argparse
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import requests
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "go2rtc", "config.yml")
 LOG_PATH = os.path.join(os.path.dirname(__file__), "..", "logs", "go2rtc.log")
+ENV_PATH = os.path.join(os.path.dirname(__file__), "..", ".env")
 SID = "xiaomiio"
 BASE = "https://account.xiaomi.com"
 
@@ -243,10 +245,19 @@ def write_config(user_id, pass_token, auto_yes=False):
         if count == 0:
             new_content = content.rstrip() + f'\n\nxiaomi:\n  "{user_id}": {pass_token}\n'
 
+        # Remove template token entries that would otherwise linger after copying
+        # config.example.yml to config.yml.
+        new_content = re.sub(r'(?m)^\s+"YOUR_XIAOMI_USER_ID":\s+.+\n?', '', new_content)
+        new_content, stream_warnings = update_xiaomi_streams(new_content, user_id, load_env_values())
+
         with open(config_path, "w") as f:
             f.write(new_content)
 
         print("已写入配置文件!")
+        if stream_warnings:
+            print("\n配置提醒：")
+            for warning in stream_warnings:
+                print(f"  - {warning}")
         return True
     except Exception as e:
         print(f"写入失败: {e}")
@@ -302,6 +313,69 @@ def current_log_size():
     if not os.path.exists(log_path):
         return 0
     return os.path.getsize(log_path)
+
+
+def load_env_values():
+    env_path = Path(ENV_PATH)
+    values = {}
+    if not env_path.exists():
+        return values
+
+    for raw_line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
+
+
+def camera_prefix_to_stream(prefix):
+    name = prefix.removeprefix("CAM_").lower()
+    return f"{name}_cam"
+
+
+def update_xiaomi_streams(content, user_id, env_values):
+    warnings = []
+
+    # Stream URLs must reference the same userId that owns the passToken.
+    content = re.sub(r"xiaomi://[^:@/\s]+:", f"xiaomi://{user_id}:", content)
+
+    camera_prefixes = sorted(
+        key[:-3] for key in env_values
+        if key.startswith("CAM_") and key.endswith("_IP") and env_values.get(key)
+    )
+    for prefix in camera_prefixes:
+        stream_name = camera_prefix_to_stream(prefix)
+        ip = env_values.get(f"{prefix}_IP", "")
+        did = env_values.get(f"{prefix}_DID", "")
+        model = env_values.get(f"{prefix}_MODEL", "")
+        if not all([ip, did, model]):
+            warnings.append(f"{stream_name}: .env 缺少 {prefix}_IP/DID/MODEL，未自动更新")
+            continue
+
+        url = f"xiaomi://{user_id}:cn@{ip}?did={did}&model={model}"
+        pattern = (
+            r"(?m)^(\s{4}-\s+)xiaomi://[^\n]*"
+            r"(?=(?:\n\s{2}[A-Za-z0-9_-]+:|\n\s*$|\Z))"
+        )
+
+        def replace_stream(match):
+            before = content[:match.start()]
+            last_stream = None
+            for stream_match in re.finditer(r"(?m)^\s{2}([A-Za-z0-9_-]+):\s*$", before):
+                last_stream = stream_match.group(1)
+            if last_stream == stream_name:
+                return match.group(1) + url
+            return match.group(0)
+
+        content = re.sub(pattern, replace_stream, content)
+
+    for stream_name, url in re.findall(r"(?m)^\s{2}([A-Za-z0-9_-]+):\s*\n\s{4}-\s+(xiaomi://[^\n]+)", content):
+        if any(token in url for token in ("YOUR_XIAOMI_USER_ID", "CAMERA_IP", "DEVICE_ID", "CAMERA_MODEL")):
+            warnings.append(f"{stream_name}: 仍包含占位符，请在 go2rtc/config.yml 中补齐摄像头 IP/DID/model")
+
+    return content, warnings
 
 
 def main():

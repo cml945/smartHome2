@@ -57,11 +57,25 @@ if [[ ! -f "$GO2RTC_LOG" ]]; then
     exit 0
 fi
 
-if tail -n 300 "$GO2RTC_LOG" | grep -q '401 Unauthorized'; then
+LAST_START_LINE="$(grep -n 'INF go2rtc platform=' "$GO2RTC_LOG" | tail -n 1 | cut -d: -f1 || true)"
+if [[ -n "$LAST_START_LINE" ]]; then
+    RECENT_GO2RTC_LOG="$(sed -n "${LAST_START_LINE},\$p" "$GO2RTC_LOG")"
+else
+    RECENT_GO2RTC_LOG="$(tail -n 1000 "$GO2RTC_LOG")"
+fi
+
+if grep -q '401 Unauthorized' <<<"$RECENT_GO2RTC_LOG"; then
     if [[ "$(cat "$STATE_FILE" 2>/dev/null || true)" != "xiaomi_401" ]]; then
         log "Xiaomi token appears expired: 401 Unauthorized found"
         notify_ha "小米摄像头 token 可能已过期" "go2rtc 日志出现 401 Unauthorized。请在 Mac 上运行：cd ${PROJECT_DIR} && make xiaomi-token-refresh"
         echo "xiaomi_401" > "$STATE_FILE"
+    fi
+elif grep -q 'permit deny' <<<"$RECENT_GO2RTC_LOG"; then
+    if [[ "$(cat "$STATE_FILE" 2>/dev/null || true)" != "xiaomi_permit_deny" ]]; then
+        STREAMS="$(grep 'permit deny' <<<"$RECENT_GO2RTC_LOG" | sed -n 's/.*stream=\([^ ]*\).*/\1/p' | sort -u | tr '\n' ' ')"
+        log "Xiaomi stream permission/config error: ${STREAMS:-unknown stream}"
+        notify_ha "小米摄像头权限或配置异常" "go2rtc 日志出现 permit deny：${STREAMS:-unknown stream}。请检查 stream 的 userId、IP、DID、model，以及摄像头是否属于当前小米账号。"
+        echo "xiaomi_permit_deny" > "$STATE_FILE"
     fi
 else
     if [[ -f "$STATE_FILE" ]]; then

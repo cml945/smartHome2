@@ -271,6 +271,7 @@ input {
 
 .token-inputs {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-bottom: 12px;
   flex-wrap: wrap;
@@ -278,6 +279,22 @@ input {
 
 .token-inputs input {
   flex: 1 1 320px;
+}
+
+.send-status {
+  min-width: 180px;
+}
+
+.send-status.pending {
+  color: var(--warn);
+}
+
+.send-status.ok {
+  color: var(--ok);
+}
+
+.send-status.error {
+  color: var(--fail);
 }
 
 .terminal {
