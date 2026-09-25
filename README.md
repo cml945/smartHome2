@@ -137,6 +137,15 @@ make dashboard
 
 小米 token 刷新会调用 `scripts/get_xiaomi_token.py --yes --restart --check`，可能需要输入小米账号、密码和短信/邮箱验证码。控制台不会保存账号密码，不会回显密码，也不会显示完整 passToken；刷新成功后会写入 `go2rtc/config.yml`、重启 go2rtc，并检查日志中是否仍有新的 `401 Unauthorized`。
 
+小米会话自动恢复由 `make token-watch-install` 安装的 launchd 任务执行，每 10 分钟检查一次。已安装任务会直接使用更新后的脚本，无需重新安装：
+
+- 发现小米视频流出现新的 `401 Unauthorized`，且视频接收计数没有增长时，只重启 go2rtc，复用已有凭据。
+- 重启后等待 15 秒，再间隔 5 秒比较视频接收字节数，确认受影响摄像头是否恢复。尚未恢复的摄像头会在后续检查中继续验证。
+- 一小时内最多自动重启一次；冷却结束后，也必须再次发现新的 401 才会重试。普通网络超时、权限拒绝和 Web/API 登录错误不会触发重启。
+- 日志读取位置、待恢复摄像头和冷却时间保存在 `logs/xiaomi-token-watch.json`，并发运行由文件锁保护。失败会保留本地状态，并尝试使用现有 HA 配置发送通知；持续 401 时仍需人工刷新凭据。
+
+手动检查可运行 `make token-watch-run`，结果记录在 `logs/xiaomi-token-watch.log`。该功能使用 macOS 自带的 Python 3 标准库，不需要新增依赖。
+
 如果只想在终端查看控制台使用的结构化状态，可运行：
 
 ```bash

@@ -290,8 +290,8 @@ def collect_status() -> Dict[str, Any]:
     token_error_streams = ", ".join(sorted({error["stream"] for error in token_auth_errors if error["stream"]}))
     if token_recent_401:
         token_status = "fail"
-        token_detail = f"刷新后仍检测到 401 Unauthorized{f'：{token_error_streams}' if token_error_streams else ''}"
-        token_hint = "使用下方刷新小米 token 功能。"
+        token_detail = f"检测到 401 Unauthorized{f'：{token_error_streams}' if token_error_streams else ''}"
+        token_hint = "监控每 10 分钟尝试自动恢复，一小时内最多重启一次；持续失败时再使用下方刷新功能。"
     elif token_recent_permit_deny:
         token_status = "fail"
         token_detail = f"检测到摄像头权限/配置拒绝{f'：{token_error_streams}' if token_error_streams else ''}"
@@ -300,6 +300,10 @@ def collect_status() -> Dict[str, Any]:
         token_status = "warn"
         token_detail = "token 监控发现 go2rtc API 不可达"
         token_hint = "先启动 go2rtc，再重新运行 token 监控。"
+    elif token_state in {"xiaomi_recovery_pending", "xiaomi_restart_failed"}:
+        token_status = "warn"
+        token_detail = "自动恢复尚未确认出流" if token_state == "xiaomi_recovery_pending" else "go2rtc 自动重启失败"
+        token_hint = "查看 token 监控日志及摄像头连接状态。"
     else:
         token_status = "ok" if token_watch_loaded else "warn"
         token_detail = "监控已加载，未发现近期 401" if token_watch_loaded else "token 监控未加载"
